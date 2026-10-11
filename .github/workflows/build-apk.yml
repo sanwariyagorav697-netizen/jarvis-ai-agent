@@ -13,24 +13,202 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Java
-        uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
 
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
+      - uses: subosito/flutter-action@v2
         with:
           channel: stable
 
-      - name: Create Android app
+      - name: Create Flutter project
         run: flutter create --platforms=android --project-name jarvis_ai_agent app
 
-      - name: Build APK
+      - name: Add voice packages
+        working-directory: app
+        run: |
+          flutter pub add speech_to_text
+          flutter pub add flutter_tts
+
+      - name: Add microphone permission
+        run: |
+          sed -i '/<application/i\    <uses-permission android:name="android.permission.RECORD_AUDIO"/>\n    <uses-permission android:name="android.permission.INTERNET"/>' app/android/app/src/main/AndroidManifest.xml
+          sed -i '/<application/i\    <queries><intent><action android:name="android.speech.RecognitionService"/></intent><intent><action android:name="android.intent.action.TTS_SERVICE"/></intent></queries>' app/android/app/src/main/AndroidManifest.xml
+
+      - name: Create JARVIS interface
+        run: |
+          cat > app/lib/main.dart <<'DART'
+          import 'package:flutter/material.dart';
+          import 'package:flutter_tts/flutter_tts.dart';
+          import 'package:speech_to_text/speech_to_text.dart' as stt;
+
+          void main() => runApp(const JarvisApp());
+
+          class JarvisApp extends StatelessWidget {
+            const JarvisApp({super.key});
+            @override
+            Widget build(BuildContext context) {
+              return MaterialApp(
+                debugShowCheckedModeBanner: false,
+                theme: ThemeData.dark(),
+                home: const JarvisHome(),
+              );
+            }
+          }
+
+          class JarvisHome extends StatefulWidget {
+            const JarvisHome({super.key});
+            @override
+            State<JarvisHome> createState() => _JarvisHomeState();
+          }
+
+          class _JarvisHomeState extends State<JarvisHome> {
+            final stt.SpeechToText speech = stt.SpeechToText();
+            final FlutterTts tts = FlutterTts();
+            String status = 'JARVIS ONLINE';
+            String heard = 'नमस्ते! मैं तुम्हारा JARVIS हूँ।';
+            bool listening = false;
+
+            Future<void> say(String text) async {
+              setState(() => heard = text);
+              await tts.setLanguage('hi-IN');
+              await tts.speak(text);
+            }
+
+            Future<void> listen() async {
+              final ready = await speech.initialize(
+                onStatus: (s) {
+                  if (mounted) setState(() => status = s);
+                },
+                onError: (e) {
+                  if (mounted) setState(() {
+                    status = 'माइक उपलब्ध नहीं';
+                    listening = false;
+                  });
+                },
+              );
+              if (!ready) {
+                await say('माफ करना, speech service उपलब्ध नहीं है।');
+                return;
+              }
+              setState(() {
+                listening = true;
+                status = 'सुन रहा हूँ...';
+              });
+              await speech.listen(
+                localeId: 'hi_IN',
+                listenFor: const Duration(seconds: 12),
+                onResult: (result) {
+                  if (result.finalResult) {
+                    final text = result.recognizedWords.toLowerCase();
+                    setState(() {
+                      heard = text;
+                      listening = false;
+                    });
+                    command(text);
+                  }
+                },
+              );
+            }
+
+            Future<void> command(String text) async {
+              if (text.contains('समय') || text.contains('time')) {
+                final now = TimeOfDay.now();
+                await say('अभी समय ${now.hour} बजकर ${now.minute} मिनट है।');
+              } else if (text.contains('नमस्ते') || text.contains('hello')) {
+                await say('नमस्ते! बताइए, मैं आपकी क्या मदद करूँ?');
+              } else if (text.contains('तुम कौन') || text.contains('who are you')) {
+                await say('मैं JARVIS हूँ, आपका मोबाइल वॉइस असिस्टेंट।');
+              } else if (text.contains('बंद') || text.contains('stop')) {
+                await tts.stop();
+                setState(() => status = 'तैयार हूँ');
+              } else {
+                await say('मैंने सुना: $text। अभी मैं शुरुआती वर्ज़न हूँ।');
+              }
+            }
+
+            @override
+            void dispose() {
+              speech.stop();
+              tts.stop();
+              super.dispose();
+            }
+
+            @override
+            Widget build(BuildContext context) {
+              return Scaffold(
+                backgroundColor: const Color(0xFF050B16),
+                appBar: AppBar(
+                  backgroundColor: const Color(0xFF071B30),
+                  title: const Text('J.A.R.V.I.S'),
+                  centerTitle: true,
+                ),
+                body: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.hub,
+                          size: 110, color: Colors.cyanAccent),
+                        const SizedBox(height: 20),
+                        Text(status.toUpperCase(),
+                          style: const TextStyle(
+                            color: Colors.cyanAccent,
+                            letterSpacing: 3)),
+                        const SizedBox(height: 30),
+                        const Text('आपका निजी वॉइस असिस्टेंट',
+                          style: TextStyle(fontSize: 18)),
+                        const SizedBox(height: 20),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(18),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF10253A),
+                            borderRadius: BorderRadius.circular(18),
+                            border: Border.all(color: Colors.cyanAccent),
+                          ),
+                          child: Text(heard,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(fontSize: 17)),
+                        ),
+                        const SizedBox(height: 35),
+                        IconButton(
+                          iconSize: 78,
+                          color: Colors.cyanAccent,
+                          onPressed: listening
+                            ? () async {
+                                await speech.stop();
+                                setState(() {
+                                  listening = false;
+                                  status = 'JARVIS ONLINE';
+                                });
+                              }
+                            : listen,
+                          icon: Icon(listening
+                            ? Icons.mic
+                            : Icons.mic_none),
+                        ),
+                        const Text('बोलने के लिए माइक दबाएँ'),
+                        const SizedBox(height: 16),
+                        TextButton(
+                          onPressed: () => say(
+                            'JARVIS तैयार है। आप समय पूछ सकते हैं।'),
+                          child: const Text('टेस्ट आवाज़'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            }
+          }
+          DART
+
+      - name: Build release APK
         working-directory: app
         run: flutter build apk --release
 
