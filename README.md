@@ -143,8 +143,14 @@ Key banane के लिए: `https://aistudio.google.com/apikey` (Chrome → De
 - `pubspec.lock` commit nahi hai, isliye transitive dependency versions CI par
   resolve hote hain; direct deps pinned ranges par hain aur Flutter version
   workflow me pin hai (`3.47.7`)।
-- R8/minify jaan-boojh ke off hai (plugins me reflection; rules likhe bina on
-  karna runtime crash ka risk)। APK ~20 MB isliye hai (sab ABI ek "fat" APK me)।
+- R8 + resource shrinking: Flutter 3.47 ka apna Gradle plugin ise release build
+  par khud on karta hai (aur `flutter_proguard_rules.pro` bhi deta hai), isliye
+  `android/app/build.gradle.kts` me humne kuch set nahi kiya. Kisi plugin ke liye
+  extra keep-rules chahiye ho to `android/app/proguard-rules.pro` bana dein —
+  Flutter use automatically utha leta hai।
+- APK ~20 MB hai kyunki ek "fat" APK me teeno ABI (armeabi-v7a, arm64, x86_64)
+  hain. `flutter build apk --release --split-per-abi` se ~7 MB per-ABI files
+  milti hain (Phase 8 me option banayenge)।
 
 ## 7. Local dev / test (PC nahi chahiye)
 

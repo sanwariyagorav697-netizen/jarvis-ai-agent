@@ -53,7 +53,9 @@ jobs:
           flutter --version
 
       - name: Install dependencies
-        run: flutter pub get 2>&1 | tee -a "$CI_LOG"
+        run: |
+          set -eo pipefail
+          flutter pub get 2>&1 | tee -a "$CI_LOG"
 
       - name: Format check (warning-only until Phase 8)
         run: |
@@ -61,10 +63,14 @@ jobs:
             || echo "::warning::dart format ko changes chahiye — Phase 8 me isko blocking banayenge"
 
       - name: Analyze (blocking)
-        run: flutter analyze 2>&1 | tee -a "$CI_LOG"
+        run: |
+          set -eo pipefail
+          flutter analyze 2>&1 | tee -a "$CI_LOG"
 
       - name: Unit tests (blocking)
-        run: flutter test 2>&1 | tee -a "$CI_LOG"
+        run: |
+          set -eo pipefail
+          flutter test 2>&1 | tee -a "$CI_LOG"
 
       - name: Set up release signing (skipped when secrets absent)
         run: |
@@ -86,7 +92,12 @@ jobs:
           echo "Keystore: $(sha256sum android/app/jarvis-release.jks | cut -c1-16) (git me nahi gaya)"
 
       - name: Build release APK
-        run: flutter build apk --release 2>&1 | tee -a "$CI_LOG"
+        # pipefail zaroori: `flutter build ... | tee` me tee ka exit code 0 hota
+        # hai, isliye without pipefail FAIL build bhi green dikh jata (run
+        # 38253691873 me yahi hua tha).
+        run: |
+          set -eo pipefail
+          flutter build apk --release 2>&1 | tee -a "$CI_LOG"
 
       - name: Verify APK output + checksum
         run: |

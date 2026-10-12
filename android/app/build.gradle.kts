@@ -66,9 +66,15 @@ android {
                 } else {
                     signingConfigs.getByName("debug")
                 }
-            // R8/shrink abhi OFF: plugins me reflection hota hai, rules likhe
-            // bina enable karna runtime crash ka risk hai. (README me note hai.)
-            isMinifyEnabled = false
+            // Minify/R8 + resource shrinking yahan SET NAHI karte.
+            // Flutter 3.47 ka own Gradle plugin (FlutterPlugin.kt) release build
+            // par khud karta hai: isMinifyEnabled = true, isShrinkResources = true,
+            // aur proguard-android-optimize.txt + flutter_proguard_rules.pro add
+            // karta hai. Template ke upar isMinifyEnabled = false likhne se AGP
+            // fail hota hai: "Removing unused resources requires unused code
+            // shrinking to be turned on" (CI run 38253691873 me yahi dikha).
+            // Kisi plugin ke reflection keep rules chahiye ho to
+            // android/app/proguard-rules.pro bana dijiye — plugin use utha leta hai.
         }
     }
 }
