@@ -1,0 +1,31 @@
+name: jarvis_ai_agent
+description: "JARVIS - ek voice-enabled Android AI assistant (Flutter + Gemini)."
+publish_to: "none"
+
+# versionName+versionCode. Har naye release me build number (+N) badhao,
+# warna Android purane APK ke upar install karne se mana kar dega.
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.11.0-0
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Voice: Android ka on-device SpeechRecognizer + TextToSpeech engine.
+  speech_to_text: ^7.5.0
+  flutter_tts: ^4.2.5
+
+  # Settings + conversation history (app-private storage).
+  shared_preferences: ^2.3.3
+
+  cupertino_icons: ^1.0.8
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
