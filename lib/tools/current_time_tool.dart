@@ -67,7 +67,7 @@ abstract final class TimeFormatting {
     final int h12 = hour12(now.hour);
     final String minutes = now.minute.toString().padLeft(2, '0');
     return hindi
-        ? '${dayPartHindi(now.hour)} $h12 बजकर ${minutes} मिनट'
+        ? '${dayPartHindi(now.hour)} $h12 बजकर $minutes मिनट'
         : '$h12:$minutes ${now.hour < 12 ? 'AM' : 'PM'}';
   }
 
