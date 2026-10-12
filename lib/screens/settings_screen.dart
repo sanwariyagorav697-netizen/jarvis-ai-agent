@@ -61,7 +61,7 @@ class SettingsScreen extends StatelessWidget {
               children: <Widget>[
                 _Section(
                   title: 'सुनने की भाषा (Speech recognition)',
-                  child: Wrap(
+                  body: Wrap(
                     spacing: 8,
                     children: <Widget>[
                       for (final MapEntry<String, String> e
@@ -83,7 +83,7 @@ class SettingsScreen extends StatelessWidget {
                 ),
                 _Section(
                   title: 'बोलने की आवाज़ (Text to speech)',
-                  child: Wrap(
+                  body: Wrap(
                     spacing: 8,
                     children: <Widget>[
                       for (final MapEntry<String, String> e
@@ -108,7 +108,7 @@ class SettingsScreen extends StatelessWidget {
                 ),
                 _Section(
                   title: 'आवाज़ की रफ़्तार',
-                  child: Column(
+                  body: Column(
                     children: <Widget>[
                       Slider(
                         min: 0.2,
@@ -133,7 +133,7 @@ class SettingsScreen extends StatelessWidget {
                 ),
                 _Section(
                   title: 'व्यवहार',
-                  child: Column(
+                  body: Column(
                     children: <Widget>[
                       SwitchListTile(
                         contentPadding: EdgeInsets.zero,
@@ -181,7 +181,7 @@ class SettingsScreen extends StatelessWidget {
                 ),
                 _Section(
                   title: 'डेटा और सुरक्षा',
-                  child: Text(
+                  body: Text(
                     'अभी: समय/तारीख़ और कामों की लिस्ट पूरी तरह डिवाइस पर बनती '
                     'है — कोई नेटवर्क कॉल नहीं। ऑनलाइन AI जुड़ने के बाद आपका '
                     'सवाल चुने हुए provider के सर्वर पर HTTPS से जाएगा, और key '
@@ -201,13 +201,13 @@ class SettingsScreen extends StatelessWidget {
 class _Section extends StatelessWidget {
   const _Section({
     required this.title,
-    required this.child,
+    required this.body,
     this.note,
     this.actions = const <Widget>[],
   });
 
   final String title;
-  final Widget child;
+  final Widget body;
   final String? note;
   final List<Widget> actions;
 
@@ -230,7 +230,7 @@ class _Section extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 10),
-          child,
+          body,
           if (note != null) ...<Widget>[
             const SizedBox(height: 8),
             Text(

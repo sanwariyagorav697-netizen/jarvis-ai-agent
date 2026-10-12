@@ -73,7 +73,7 @@ class _HomeScreenState extends State<HomeScreen> {
               padding: const EdgeInsets.fromLTRB(14, 8, 14, 10),
               child: Column(
                 children: <Widget>[
-                  const StatusStrip(controller: c),
+                  StatusStrip(controller: c),
                   const SizedBox(height: 8),
                   JarvisOrb(status: c.status, level: c.micLevel, size: 150),
                   const SizedBox(height: 6),
