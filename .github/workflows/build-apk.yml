@@ -131,6 +131,21 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+      - name: Close CI-failure issues on green build
+        # Har fail par ek issue khulta hai; green hone par wo khud band ho jayein,
+        # warna aapko phone par one-by-one close karne padte.
+        if: success()
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eo pipefail
+          for n in $(gh issue list --repo "${{ github.repository }}" --state open \
+                       --search "CI: APK build failed in:title" --json number -q ".[].number"); do
+            gh issue close "$n" -r completed \
+              --comment "Green build: run ${{ github.run_id }} (${{ github.sha }}). Aapka CI-failure issue isliye band kar diya gaya."
+          done
+
       - name: Report failure as an issue (mobile-friendly error reading)
         if: failure()
         continue-on-error: true
