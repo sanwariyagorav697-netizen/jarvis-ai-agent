@@ -1,0 +1,16 @@
+# Flutter/Dart analyzer config (Flutter ke `flutter create` template se match karta hai).
+# Lint set: flutter_lints. `flutter analyze` CI me blocking hai — warnings/errors
+# par build fail hoga, isliye "unused import" jaisi cheezein chup nahi karti.
+include: package:flutter_lints/flutter.yaml
+
+analyzer:
+  exclude:
+    - build/**
+    - android/**
+
+linter:
+  rules:
+    # Extra strictness jo is project ke liye khas taur par useful hai.
+    unawaited_futures: true
+    always_declare_return_types: true
+    prefer_final_locals: true

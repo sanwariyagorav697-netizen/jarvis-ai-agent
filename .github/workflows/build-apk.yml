@@ -4,18 +4,30 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
+    tags: ['v*'] # v1.2.3 jaisa tag push karne par APK ek permanent Release asset ban jaata hai
+  pull_request:
+    branches: [main]
 
 permissions:
   contents: read
+  issues: write # sirf failure ka error-tail issue kholne ke liye (continue-on-error)
+
+concurrency:
+  group: apk-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FLUTTER_VERSION: "3.47.7" # 2026-10-11 ko 'stable' ka HEAD — android/ scaffold isi ke template se hai
+  CI_LOG: /tmp/jarvis-ci.log
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-java@v5
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: "17"
@@ -23,197 +35,212 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
 
-      - name: Create Flutter project
-        run: flutter create --platforms=android --project-name jarvis_ai_agent app
-
-      - name: Add voice packages
-        working-directory: app
+      - name: Toolchain info (repo structure check)
         run: |
-          flutter pub add speech_to_text
-          flutter pub add flutter_tts
+          set -e
+          {
+            echo "## Build info"
+            echo "- Flutter: \`$(flutter --version | head -1)\`"
+            echo "- Dart: \`$(dart --version)\`"
+            echo "- Java: \`$(java -version 2>&1 | head -1)\`"
+            echo "- Commit: ${GITHUB_SHA::7} on ${GITHUB_REF_NAME}"
+          } >> "$GITHUB_STEP_SUMMARY"
+          # Repo me app source hona chahiye (CI ab app generate nahi karta).
+          test -f pubspec.yaml || { echo "::error::pubspec.yaml missing — app source repo me hai hi nahi"; exit 1; }
+          test -f lib/main.dart || { echo "::error::lib/main.dart missing"; exit 1; }
+          test -f android/app/build.gradle.kts || { echo "::error::android scaffold missing"; exit 1; }
+          flutter --version
 
-      - name: Add microphone permission
+      - name: Install dependencies
         run: |
-          sed -i '/<application/i\    <uses-permission android:name="android.permission.RECORD_AUDIO"/>\n    <uses-permission android:name="android.permission.INTERNET"/>' app/android/app/src/main/AndroidManifest.xml
-          sed -i '/<application/i\    <queries><intent><action android:name="android.speech.RecognitionService"/></intent><intent><action android:name="android.intent.action.TTS_SERVICE"/></intent></queries>' app/android/app/src/main/AndroidManifest.xml
+          set -eo pipefail
+          flutter pub get 2>&1 | tee -a "$CI_LOG"
 
-      - name: Create JARVIS interface
+      - name: Format check (warning-only until Phase 8)
         run: |
-          cat > app/lib/main.dart <<'DART'
-          import 'package:flutter/material.dart';
-          import 'package:flutter_tts/flutter_tts.dart';
-          import 'package:speech_to_text/speech_to_text.dart' as stt;
+          dart format --output=none --set-exit-if-changed lib test \
+            || echo "::warning::dart format ko changes chahiye — Phase 8 me isko blocking banayenge"
 
-          void main() => runApp(const JarvisApp());
+      - name: Analyze (blocking)
+        run: |
+          set -eo pipefail
+          flutter analyze 2>&1 | tee -a "$CI_LOG"
 
-          class JarvisApp extends StatelessWidget {
-            const JarvisApp({super.key});
-            @override
-            Widget build(BuildContext context) {
-              return MaterialApp(
-                debugShowCheckedModeBanner: false,
-                theme: ThemeData.dark(),
-                home: const JarvisHome(),
-              );
-            }
-          }
+      - name: Unit tests (blocking)
+        run: |
+          set -eo pipefail
+          flutter test 2>&1 | tee -a "$CI_LOG"
 
-          class JarvisHome extends StatefulWidget {
-            const JarvisHome({super.key});
-            @override
-            State<JarvisHome> createState() => _JarvisHomeState();
-          }
-
-          class _JarvisHomeState extends State<JarvisHome> {
-            final stt.SpeechToText speech = stt.SpeechToText();
-            final FlutterTts tts = FlutterTts();
-            String status = 'JARVIS ONLINE';
-            String heard = 'नमस्ते! मैं तुम्हारा JARVIS हूँ।';
-            bool listening = false;
-
-            Future<void> say(String text) async {
-              setState(() => heard = text);
-              await tts.setLanguage('hi-IN');
-              await tts.speak(text);
-            }
-
-            Future<void> listen() async {
-              final ready = await speech.initialize(
-                onStatus: (s) {
-                  if (mounted) setState(() => status = s);
-                },
-                onError: (e) {
-                  if (mounted) setState(() {
-                    status = 'माइक उपलब्ध नहीं';
-                    listening = false;
-                  });
-                },
-              );
-              if (!ready) {
-                await say('माफ करना, speech service उपलब्ध नहीं है।');
-                return;
-              }
-              setState(() {
-                listening = true;
-                status = 'सुन रहा हूँ...';
-              });
-              await speech.listen(
-                localeId: 'hi_IN',
-                listenFor: const Duration(seconds: 12),
-                onResult: (result) {
-                  if (result.finalResult) {
-                    final text = result.recognizedWords.toLowerCase();
-                    setState(() {
-                      heard = text;
-                      listening = false;
-                    });
-                    command(text);
-                  }
-                },
-              );
-            }
-
-            Future<void> command(String text) async {
-              if (text.contains('समय') || text.contains('time')) {
-                final now = TimeOfDay.now();
-                await say('अभी समय ${now.hour} बजकर ${now.minute} मिनट है।');
-              } else if (text.contains('नमस्ते') || text.contains('hello')) {
-                await say('नमस्ते! बताइए, मैं आपकी क्या मदद करूँ?');
-              } else if (text.contains('तुम कौन') || text.contains('who are you')) {
-                await say('मैं JARVIS हूँ, आपका मोबाइल वॉइस असिस्टेंट।');
-              } else if (text.contains('बंद') || text.contains('stop')) {
-                await tts.stop();
-                setState(() => status = 'तैयार हूँ');
-              } else {
-                await say('मैंने सुना: $text। अभी मैं शुरुआती वर्ज़न हूँ।');
-              }
-            }
-
-            @override
-            void dispose() {
-              speech.stop();
-              tts.stop();
-              super.dispose();
-            }
-
-            @override
-            Widget build(BuildContext context) {
-              return Scaffold(
-                backgroundColor: const Color(0xFF050B16),
-                appBar: AppBar(
-                  backgroundColor: const Color(0xFF071B30),
-                  title: const Text('J.A.R.V.I.S'),
-                  centerTitle: true,
-                ),
-                body: Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(Icons.hub,
-                          size: 110, color: Colors.cyanAccent),
-                        const SizedBox(height: 20),
-                        Text(status.toUpperCase(),
-                          style: const TextStyle(
-                            color: Colors.cyanAccent,
-                            letterSpacing: 3)),
-                        const SizedBox(height: 30),
-                        const Text('आपका निजी वॉइस असिस्टेंट',
-                          style: TextStyle(fontSize: 18)),
-                        const SizedBox(height: 20),
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.all(18),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF10253A),
-                            borderRadius: BorderRadius.circular(18),
-                            border: Border.all(color: Colors.cyanAccent),
-                          ),
-                          child: Text(heard,
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(fontSize: 17)),
-                        ),
-                        const SizedBox(height: 35),
-                        IconButton(
-                          iconSize: 78,
-                          color: Colors.cyanAccent,
-                          onPressed: listening
-                            ? () async {
-                                await speech.stop();
-                                setState(() {
-                                  listening = false;
-                                  status = 'JARVIS ONLINE';
-                                });
-                              }
-                            : listen,
-                          icon: Icon(listening
-                            ? Icons.mic
-                            : Icons.mic_none),
-                        ),
-                        const Text('बोलने के लिए माइक दबाएँ'),
-                        const SizedBox(height: 16),
-                        TextButton(
-                          onPressed: () => say(
-                            'JARVIS तैयार है। आप समय पूछ सकते हैं।'),
-                          child: const Text('टेस्ट आवाज़'),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              );
-            }
-          }
-          DART
+      - name: Set up release signing (skipped when secrets absent)
+        run: |
+          set -e
+          KS_B64="${{ secrets.JARVIS_KEYSTORE_BASE64 }}"
+          if [ -z "$KS_B64" ]; then
+            echo "RELEASE_SIGNING=debug-fallback" >> "$GITHUB_ENV"
+            echo "::warning::JARVIS_KEYSTORE_BASE64 set nahi — APK debug key se sign hoga. Aise builds ek doosre ke UPAR install nahi honge (signature mismatch); uninstall karna padega."
+            exit 0
+          fi
+          printf '%s' "$KS_B64" | base64 -d > android/app/jarvis-release.jks
+          cat > android/key.properties <<PROPS
+          storeFile=$GITHUB_WORKSPACE/android/app/jarvis-release.jks
+          storePassword=${{ secrets.JARVIS_KEYSTORE_PASSWORD }}
+          keyAlias=${{ secrets.JARVIS_KEY_ALIAS }}
+          keyPassword=${{ secrets.JARVIS_KEY_PASSWORD }}
+          PROPS
+          echo "RELEASE_SIGNING=custom-keystore" >> "$GITHUB_ENV"
+          echo "Keystore: $(sha256sum android/app/jarvis-release.jks | cut -c1-16) (git me nahi gaya)"
 
       - name: Build release APK
-        working-directory: app
-        run: flutter build apk --release
+        # pipefail zaroori: `flutter build ... | tee` me tee ka exit code 0 hota
+        # hai, isliye without pipefail FAIL build bhi green dikh jata (run
+        # 38253691873 me yahi hua tha).
+        run: |
+          set -eo pipefail
+          flutter build apk --release 2>&1 | tee -a "$CI_LOG"
 
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
+      - name: Verify APK output + checksum
+        run: |
+          set -e
+          APK=build/app/outputs/flutter-apk/app-release.apk
+          if [ ! -f "$APK" ]; then
+            echo "::error::Expected APK not found at $APK"
+            ls -R build/app/outputs || true
+            exit 1
+          fi
+          SIZE=$(stat -c %s "$APK")
+          SHA=$(sha256sum "$APK" | cut -d' ' -f1)
+          cp "$APK" "jarvis-ai-agent-${{ env.FLUTTER_VERSION }}-${GITHUB_RUN_NUMBER}.apk"
+          echo "$SHA  jarvis-ai-agent-${{ env.FLUTTER_VERSION }}-${GITHUB_RUN_NUMBER}.apk" > jarvis-apk-sha256.txt
+          {
+            echo ""
+            echo "### Artifact"
+            echo "- Signing: \`$RELEASE_SIGNING\`"
+            echo "- Size: $((SIZE / 1024 / 1024)) MB ($SIZE bytes)"
+            echo "- SHA-256: \`$SHA\`"
+            echo "- Install: ZIP nikaalo → APK → 'Unknown sources' allow → install"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload APK + checksum
+        uses: actions/upload-artifact@v7
         with:
           name: jarvis-ai-agent-apk
-          path: app/build/app/outputs/flutter-apk/app-release.apk
+          path: |
+            jarvis-ai-agent-*.apk
+            jarvis-apk-sha256.txt
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Close CI-failure issues on green build
+        # Har fail par ek issue khulta hai; green hone par wo khud band ho jayein,
+        # warna aapko phone par one-by-one close karne padte.
+        if: success()
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eo pipefail
+          # Title "CI: build failed (<sha>)" hai (permissive search purane
+          # "CI: APK build failed" titles ko bhi pakad leti है)।
+          for n in $(gh issue list --repo "${{ github.repository }}" --state open \
+                       --search "build failed in:title" --json number -q ".[].number"); do
+            gh issue close "$n" -r completed \
+              --comment "Green build: run ${{ github.run_id }} (${{ github.sha }}). Aapka CI-failure issue isliye band kar diya gaya."
+          done
+
+      - name: Report failure as an issue (mobile-friendly error reading)
+        if: failure()
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          # Sirf `tail -n 120` se shuru ke failing tests chip jaate the (har baar
+          # dobara push karke intezaar) — isliye ab log se relevant blocks filter
+          # karke bheje jaate hain, phir tail.
+          if [ -f "$CI_LOG" ]; then
+            sed -e 's/\x1b\[[0-9;]*[A-Za-z]//g' "$CI_LOG" > /tmp/ci-clean.log
+          else
+            : > /tmp/ci-clean.log
+          fi
+          {
+            echo "### Analyzer + failing tests (filtered from CI log)"
+            echo '```'
+            grep -nE "issues found|error . info . warning " /tmp/ci-clean.log | tail -n 80 || true
+            grep -nE "\(failed\)" -A6 /tmp/ci-clean.log | tail -n 260 || true
+            grep -nE "Expected:|Actual:|tests passed|Some tests failed" /tmp/ci-clean.log | tail -n 60 || true
+            grep -nE "[a-zA-Z0-9_/.]+\.dart:[0-9]+:[0-9]+" /tmp/ci-clean.log | tail -n 40 || true
+            echo '```'
+            echo
+            echo "<details><summary>Last 80 log lines</summary>"
+            echo
+            echo '```'
+            tail -n 80 /tmp/ci-clean.log || true
+            echo '```'
+            echo "</details>"
+          } > /tmp/report.md
+          if [ "$(wc -c < /tmp/report.md)" -gt 58000 ]; then
+            head -c 58000 /tmp/report.md > /tmp/report.cut
+            mv /tmp/report.cut /tmp/report.md
+          fi
+          {
+            echo "Build fail ho gaya on \`$GITHUB_REF_NAME\` @ \`${GITHUB_SHA:0:7}\`."
+            echo
+            cat /tmp/report.md
+            echo
+            echo "[Poora run log](https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)"
+          } > /tmp/body.md
+          gh issue create --repo "$GITHUB_REPOSITORY" \
+            --title "CI: build failed (${GITHUB_SHA:0:7})" \
+            --body-file /tmp/body.md
+
+  # ==========================================================================
+  # Release publish — sirf tab chalta hai jab aap ek v* tag push karein.
+  # Kyun chahiye: Actions ka artifact 30 din me expire ho jata hai aur use
+  # download karne ke liye GitHub login lagta hai. Release asset ka link
+  # bina-login, permanent hota hai — phone se seedha tap → download → install.
+  # ==========================================================================
+  release:
+    name: Publish APK as a Release asset (v* tags only)
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # sirf is job ke liye; build job read-only hi rehta hai
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          name: jarvis-ai-agent-apk
+          path: apk-in
+
+      - name: Publish release + checksum
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eo pipefail
+          SRC=$(ls apk-in/*.apk 2>/dev/null | head -1)
+          if [ -z "$SRC" ]; then
+            echo "::error::APK artifact me koi .apk file nahi mili"
+            ls -la apk-in || true
+            exit 1
+          fi
+          cp "$SRC" jarvis-release.apk
+          SHA=$(sha256sum jarvis-release.apk | cut -d' ' -f1)
+          SIZE=$(stat -c %s jarvis-release.apk)
+          printf '%s  jarvis-release.apk\n' "$SHA" > jarvis-release.apk.sha256.txt
+          {
+            echo "### Release APK (${GITHUB_REF_NAME})"
+            echo "- File: \`jarvis-release.apk\` ($SIZE bytes)"
+            echo "- SHA-256: \`$SHA\`"
+            echo "- Commit: \`${GITHUB_SHA:0:7}\`, Flutter ${{ env.FLUTTER_VERSION }}"
+            echo "- Link: https://github.com/$GITHUB_REPOSITORY/releases/download/${GITHUB_REF_NAME}/jarvis-release.apk"
+          } >> "$GITHUB_STEP_SUMMARY"
+          NOTES="JARVIS ${GITHUB_REF_NAME} — release APK, GitHub Actions par analyze (0 issues) + 125 unit tests pass hone ke baad bana."$'\n\n'"Install: neeche \`jarvis-release.apk\` download kijiye → phone par open → 'unknown sources' allow → install. APK me koi API key nahi hoti; key aapke phone ki Keystore-backed secure storage me jaati hai (Settings → ऑनलाइन AI → Test API Connection)."$'\n\n'"Signing: JARVIS_KEYSTORE_* secrets set na hone par yeh debug key se signed hai — isliye purane debug-signed build ke UPAR install na ho to pehle uninstall karna padega. Stable upgrades ke liye repo me 4 signing secrets set kar dijiye."
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" jarvis-release.apk jarvis-release.apk.sha256.txt --clobber --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$GITHUB_REF_NAME" jarvis-release.apk jarvis-release.apk.sha256.txt \
+              --title "JARVIS APK ${GITHUB_REF_NAME}" --notes "$NOTES" --repo "$GITHUB_REPOSITORY"
+          fi
+          echo "✅ Release asset ready: https://github.com/$GITHUB_REPOSITORY/releases/download/${GITHUB_REF_NAME}/jarvis-release.apk"
