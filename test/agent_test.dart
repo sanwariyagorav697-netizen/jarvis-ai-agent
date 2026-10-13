@@ -387,7 +387,7 @@ void main() {
       expect(turn.retryAfter, const Duration(seconds: 9));
       expect(turn.reply, contains('प्रति-मिनट'));
       expect(turn.toolResults, hasLength(1));
-      expect(turn.reply, contains('चले हुए टूल: get_current_time'));
+      expect(turn.reply, contains('जो टूल चल चुके थे: get_current_time'));
     });
 
     test('अनजान exception → badResponse + "आगे कुछ नहीं किया" (crash नहीं)', () async {

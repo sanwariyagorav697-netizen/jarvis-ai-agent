@@ -113,7 +113,7 @@ class GeminiService implements AiService {
       if (response.statusCode != 200) {
         final AiException failure = mapHttpFailure(
           response.statusCode,
-          response.body,
+          responseText(response),
           retryAfter: parseRetryAfter(response.headers['retry-after']),
         );
         return AiHealth(
@@ -343,7 +343,7 @@ class _GeminiConversation implements AiConversation {
     if (response.statusCode != 200) {
       final AiException failure = mapHttpFailure(
         response.statusCode,
-        response.body,
+        responseText(response),
         retryAfter: parseRetryAfter(response.headers['retry-after']),
       );
       final int waitSeconds = failure.retryAfter?.inSeconds ?? 999;

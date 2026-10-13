@@ -37,6 +37,18 @@ Map<String, Object?> _completion({
   return <String, Object?>{'choices': <Object?>[choice]};
 }
 
+/// package:http में `Response(String body, ...)` का default encoding latin1
+/// रहता है जब तक content-type न मिले — तो देवनागरी वाली mock bodies encode ही
+/// नहीं होतीं। असली Gemini/Groq `application/json` भेजते हैं, यही simulate करते
+/// हैं (इसीलिए हर mock response इसी helper से बनता है)।
+http.Response jsonResponse(String body,
+        {int status = 200, Map<String, String>? headers}) =>
+    http.Response(body, status,
+        headers: <String, String>{
+          'content-type': 'application/json; charset=utf-8',
+          ...?headers,
+        });
+
 void main() {
   group('OpenAiParser', () {
     test('साफ़ text जवाब', () {
@@ -129,7 +141,7 @@ void main() {
         apiKey: 'gsk_test1234567890abcdef',
         client: MockClient((http.Request request) async {
           sent.add(request);
-          return http.Response(jsonEncode(_completion(content: 'हो गया')), 200);
+          return jsonResponse(jsonEncode(_completion(content: 'हो गया')), status: 200);
         }),
       );
 
@@ -198,7 +210,7 @@ void main() {
         client: MockClient((http.Request request) async {
           final Map<String, Object?> body = jsonDecode(request.body) as Map<String, Object?>;
           sentMessages.add(body['messages']! as List<Object?>);
-          return http.Response(responses.removeAt(0), 200);
+          return jsonResponse(responses.removeAt(0), status: 200);
         }),
       );
 
@@ -248,13 +260,13 @@ void main() {
         client: MockClient((http.Request request) async {
           calls++;
           if (calls == 1) {
-            return http.Response(
+            return jsonResponse(
               '{"error":{"message":"Rate limit reached for requests per minute"}}',
-              429,
+              status: 429,
               headers: <String, String>{'retry-after': '1'},
             );
           }
-          return http.Response(jsonEncode(_completion(content: 'अब ठीक')), 200);
+          return jsonResponse(jsonEncode(_completion(content: 'अब ठीक')), status: 200);
         }),
       );
       final AiReply reply = await service
@@ -273,7 +285,7 @@ void main() {
       final OpenAiCompatService service = OpenAiCompatService(
         model: 'm',
         apiKey: 'gsk_test1234567890abcdef',
-        client: MockClient((http.Request request) async => http.Response(
+        client: MockClient((http.Request request) async => jsonResponse(
             '{"error":{"message":"Invalid API key"}}', 401)),
       );
       await expectLater(
@@ -295,9 +307,9 @@ void main() {
       final OpenAiCompatService service = OpenAiCompatService(
         model: 'm',
         apiKey: 'gsk_test1234567890abcdef',
-        client: MockClient((http.Request request) async => http.Response(
+        client: MockClient((http.Request request) async => jsonResponse(
             '{"error":{"message":"The model `m` does not exist or you do not have access to it."}}',
-            404)),
+            status: 404)),
       );
       final AiHealth health = await service.healthCheck();
       expect(health.ok, isFalse);

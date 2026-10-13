@@ -383,16 +383,22 @@ String blockedFromFeedback(String? reason) {
   return '$kya ने यह जवाब रोक दिया। शब्द बदलकर दोबारा पूछिए।';
 }
 
+/// `response.body` content-type के charset से decode होता है, और
+/// package:http के पास charset न मिले तो default **latin1** है — जिससे
+/// देवनागरी/हिंदी जवाब mojibake बन जाते हैं। इसलिए हमेशा raw bytes से utf8।
+String responseText(http.Response response) =>
+    utf8.decode(response.bodyBytes, allowMalformed: true);
+
 /// 200 + JSON की गारंटी; वरना [AiErrorKind.badResponse]।
 Map<String, Object?> requireJsonObject(http.Response response) {
-  final Object? decoded = tryJson(response.body.trim());
+  final Object? decoded = tryJson(responseText(response).trim());
   if (decoded is Map<String, Object?> && decoded.isNotEmpty) {
     return decoded;
   }
   throw AiException(
     kind: AiErrorKind.badResponse,
     message: 'API का जवाब पढ़ा नहीं जा सका (JSON नहीं मिला)। दोबारा पूछिए।',
-    detail: clip(response.body),
+    detail: clip(responseText(response)),
   );
 }
 
@@ -451,8 +457,12 @@ Future<http.Response> postJson(
   required Map<String, String> headers,
   required Duration timeout,
 }) {
-  final String encoded = jsonEncode(body);
-  return client.post(url, headers: headers, body: encoded).timeout(timeout, onTimeout: () {
+  // bytes भेजते हैं (String नहीं): वरना package:http content-type के charset पर
+  // fallback करता है और बिना charset वाले endpoint पर हिंदी text बिगड़ सकता है।
+  final List<int> encoded = utf8.encode(jsonEncode(body));
+  return client
+      .post(url, headers: headers, body: encoded)
+      .timeout(timeout, onTimeout: () {
     throw TimeoutException('AI request timeout', timeout);
   });
 }

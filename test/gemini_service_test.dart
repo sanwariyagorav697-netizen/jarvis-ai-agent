@@ -44,6 +44,18 @@ Map<String, Object?> _replyJson({
   return <String, Object?>{'candidates': <Object?>[candidate]};
 }
 
+/// package:http में `Response(String body, ...)` का default encoding latin1
+/// रहता है जब तक content-type न मिले — तो देवनागरी वाली mock bodies encode ही
+/// नहीं होतीं। असली Gemini/Groq `application/json` भेजते हैं, यही simulate करते
+/// हैं (इसीलिए हर mock response इसी helper से बनता है)।
+http.Response jsonResponse(String body,
+        {int status = 200, Map<String, String>? headers}) =>
+    http.Response(body, status,
+        headers: <String, String>{
+          'content-type': 'application/json; charset=utf-8',
+          ...?headers,
+        });
+
 void main() {
   group('GeminiParser', () {
     test('साफ़ text जवाब', () {
@@ -152,10 +164,9 @@ void main() {
         apiKey: 'test-key-abcdefghijklmn',
         client: MockClient((http.Request request) async {
           sent.add(request);
-          return http.Response(
+          return jsonResponse(
             jsonEncode(_replyJson(text: 'जवाब तैयार है।')),
-            200,
-            headers: <String, String>{'content-type': 'application/json'},
+            status: 200,
           );
         }),
       );
@@ -221,7 +232,7 @@ void main() {
           final Map<String, Object?> body =
               jsonDecode(request.body) as Map<String, Object?>;
           sentContents.add(<String, Object?>{'contents': body['contents']});
-          return http.Response(replies.removeAt(0), 200);
+          return jsonResponse(replies.removeAt(0), status: 200);
         }),
       );
 
@@ -276,7 +287,7 @@ void main() {
           final Map<String, Object?> body =
               jsonDecode(request.body) as Map<String, Object?>;
           sizes.add((body['contents']! as List<Object?>).length);
-          return http.Response(jsonEncode(_replyJson()), 200);
+          return jsonResponse(jsonEncode(_replyJson()), status: 200);
         }),
       );
       final AiConversation conversation = service.startConversation(
@@ -298,18 +309,18 @@ void main() {
         client: MockClient((http.Request request) async {
           calls++;
           if (calls == 1) {
-            return http.Response(
+            return jsonResponse(
               jsonEncode(<String, Object?>{
                 'error': <String, Object?>{
                   'message': 'Resource has been exhausted (rate limit per-minute).',
                   'status': 'RESOURCE_EXHAUSTED',
                 },
               }),
-              429,
+              status: 429,
               headers: <String, String>{'retry-after': '1'},
             );
           }
-          return http.Response(jsonEncode(_replyJson(text: 'अब चल गया')), 200);
+          return jsonResponse(jsonEncode(_replyJson(text: 'अब चल गया')), status: 200);
         }),
       );
       final AiReply reply = await service
@@ -331,11 +342,11 @@ void main() {
         apiKey: 'test-key-abcdefghijklmn',
         client: MockClient((http.Request request) async {
           calls++;
-          return http.Response(
+          return jsonResponse(
             jsonEncode(<String, Object?>{
               'error': <String, Object?>{'message': 'You exceeded your current quota (daily).'},
             }),
-            429,
+            status: 429,
           );
         }),
       );
@@ -359,10 +370,10 @@ void main() {
       final GeminiService service = GeminiService(
         model: 'gemini-test-flash',
         apiKey: 'test-key-abcdefghijklmn',
-        client: MockClient((http.Request request) async => http.Response(
+        client: MockClient((http.Request request) async => jsonResponse(
             '{"error":{"message":"API key not valid. Please pass a valid API key.",'
             '"status":"UNAUTHENTICATED"}}',
-            401)),
+            status: 401)),
       );
       await expectLater(
         service
@@ -385,7 +396,7 @@ void main() {
         requestTimeout: const Duration(milliseconds: 30),
         client: MockClient((http.Request request) async {
           await Future<void>.delayed(const Duration(seconds: 5));
-          return http.Response('{}', 200);
+          return jsonResponse('{}', status: 200);
         }),
       );
       await expectLater(
@@ -406,7 +417,7 @@ void main() {
       final GeminiService service = GeminiService(
         model: 'gemini-test-flash',
         apiKey: 'test-key-abcdefghijklmn',
-        client: MockClient((http.Request request) async => http.Response('<html/>', 200)),
+        client: MockClient((http.Request request) async => jsonResponse('<html/>', status: 200)),
       );
       await expectLater(
         service
@@ -440,7 +451,7 @@ void main() {
         apiKey: 'test-key-abcdefghijklmn',
         client: MockClient((http.Request request) async {
           captured = request;
-          return http.Response(jsonEncode(_replyJson(text: 'JARVIS ONLINE')), 200);
+          return jsonResponse(jsonEncode(_replyJson(text: 'JARVIS ONLINE')), status: 200);
         }),
       );
       final AiHealth health = await service.healthCheck();
@@ -458,9 +469,9 @@ void main() {
       final GeminiService service = GeminiService(
         model: 'gemini-nope',
         apiKey: 'test-key-abcdefghijklmn',
-        client: MockClient((http.Request request) async => http.Response(
+        client: MockClient((http.Request request) async => jsonResponse(
             '{"error":{"message":"models/gemini-nope is not found for API version v1beta"}}',
-            404)),
+            status: 404)),
       );
       final AiHealth health = await service.healthCheck();
       expect(health.ok, isFalse);
@@ -473,7 +484,7 @@ void main() {
         model: 'gemini-test-flash',
         apiKey: 'test-key-abcdefghijklmn',
         client: MockClient((http.Request request) async =>
-            http.Response(jsonEncode(_replyJson()), 200)),
+            jsonResponse(jsonEncode(_replyJson()), status: 200)),
       );
       final AiHealth health = await service.healthCheck();
       expect(health.ok, isFalse);
@@ -512,7 +523,7 @@ void main() {
       final GeminiService service = GeminiService(
         model: 'gemini-test-flash',
         apiKey: 'test-key-abcdefghijklmn',
-        client: MockClient((http.Request request) async => http.Response('{}', 200)),
+        client: MockClient((http.Request request) async => jsonResponse('{}', status: 200)),
       );
       final AiConversation conversation = service.startConversation(
         userText: 'hello',

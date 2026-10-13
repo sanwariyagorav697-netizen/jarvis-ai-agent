@@ -81,11 +81,12 @@ class JarvisAgent {
   }) async {
     final AiService? service = serviceBuilder();
     if (service == null) {
+      const String why =
+          'AI अभी सेट नहीं है। Settings में provider चुनकर API key डालिए।';
       return const AgentTurn(
-        reply: '',
+        reply: why,
         errorKind: AiErrorKind.notConfigured,
-        errorMessage:
-            'AI अभी सेट नहीं है। Settings में provider चुनकर API key डालिए।',
+        errorMessage: why,
         canFallBackToLocal: true,
       );
     }
