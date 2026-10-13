@@ -153,14 +153,41 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -e
-          TAIL=$(tail -n 120 "$CI_LOG" 2>/dev/null || echo "log unavailable")
-          SUMMARY="Build fail ho gaya on \`${GITHUB_REF_NAME}\` @ \`${GITHUB_SHA::7}\`.
-
-          \`\`\`
-          $TAIL
-          \`\`\`
-          [Run log](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})"
-          gh issue create \
-            --repo "${{ github.repository }}" \
-            --title "CI: APK build failed (${GITHUB_SHA::7})" \
-            --body "$SUMMARY"
+          # Sirf `tail -n 120` se shuru ke failing tests chip jaate the (har baar
+          # dobara push karke intezaar) — isliye ab log se relevant blocks filter
+          # karke bheje jaate hain, phir tail.
+          if [ -f "$CI_LOG" ]; then
+            sed -e 's/\x1b\[[0-9;]*[A-Za-z]//g' "$CI_LOG" > /tmp/ci-clean.log
+          else
+            : > /tmp/ci-clean.log
+          fi
+          {
+            echo "### Analyzer + failing tests (filtered from CI log)"
+            echo '```'
+            grep -nE "issues found|error . info . warning " /tmp/ci-clean.log | tail -n 80 || true
+            grep -nE "\(failed\)" -A6 /tmp/ci-clean.log | tail -n 260 || true
+            grep -nE "Expected:|Actual:|tests passed|Some tests failed" /tmp/ci-clean.log | tail -n 60 || true
+            grep -nE "[a-zA-Z0-9_/.]+\.dart:[0-9]+:[0-9]+" /tmp/ci-clean.log | tail -n 40 || true
+            echo '```'
+            echo
+            echo "<details><summary>Last 80 log lines</summary>"
+            echo
+            echo '```'
+            tail -n 80 /tmp/ci-clean.log || true
+            echo '```'
+            echo "</details>"
+          } > /tmp/report.md
+          if [ "$(wc -c < /tmp/report.md)" -gt 58000 ]; then
+            head -c 58000 /tmp/report.md > /tmp/report.cut
+            mv /tmp/report.cut /tmp/report.md
+          fi
+          {
+            echo "Build fail ho gaya on \`$GITHUB_REF_NAME\` @ \`${GITHUB_SHA:0:7}\`."
+            echo
+            cat /tmp/report.md
+            echo
+            echo "[Poora run log](https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)"
+          } > /tmp/body.md
+          gh issue create --repo "$GITHUB_REPOSITORY" \
+            --title "CI: build failed (${GITHUB_SHA:0:7})" \
+            --body-file /tmp/body.md
