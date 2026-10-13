@@ -163,7 +163,8 @@ void main() {
       ];
       final List<ChatMessage> trimmed = trimHistory(mixed);
       expect(trimmed.length, 10);
-      expect(trimmed.first.text, 'u3');
+      // usable = u0..u7,a0..a7 (16) -> last 10 = u6,u7,a0..a7
+      expect(trimmed.first.text, 'u6');
       expect(trimmed.last.text, 'a7');
       expect(
         trimmed.every((ChatMessage m) =>

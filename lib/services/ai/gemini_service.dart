@@ -332,7 +332,8 @@ class _GeminiConversation implements AiConversation {
         timeout: service.requestTimeout,
       );
     } on Object catch (error) {
-      throw mapTransportFailure(error);
+      // Transport failure = user-friendly Hindi; बाक़ी bug यैसे ही ऊपर जाता है।
+      throw transportFailureFor(error) ?? error;
     }
   }
 

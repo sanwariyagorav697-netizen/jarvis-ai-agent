@@ -65,7 +65,9 @@ class AiException implements Exception {
       kind == AiErrorKind.blocked;
 
   @override
-  String toString() => 'AiException(${kind.name}): $message';
+  String toString() => detail.isEmpty
+      ? 'AiException(${kind.name}): $message'
+      : 'AiException(${kind.name}): $message [$detail]';
 }
 
 /// Model ne jo tool chalane ko kaha. Ye sirf *suggest* karta है — chalane का
@@ -279,6 +281,18 @@ String waitHint(Duration? retryAfter) {
       : '$minutes मिनट $rest सेकंड में फिर';
 }
 
+/// सिर्फ़ सच में transport-level failure पहचानता है। Coding/API bugs (जैसे
+/// JSON encode की गलती) को "नेटवर्क की दिक्कत" बोलना user से झूठ बोलना है,
+/// इसलिए वो यहाँ null आता है और caller उसे वैसा ही rethrow करता है।
+AiException? transportFailureFor(Object error) {
+  // package:http का IOClient SocketException/HandshakeException को
+  // ClientException में wrap कर देता है, इसलिए ये दो ही काफ़ी हैं।
+  if (error is TimeoutException || error is http.ClientException) {
+    return mapTransportFailure(error);
+  }
+  return null;
+}
+
 /// Har network failure को एक ही shape में (timeout/offline/DNS)।
 AiException mapTransportFailure(Object error) {
   if (error is TimeoutException) {
@@ -364,7 +378,7 @@ String blockedFromFeedback(String? reason) {
     'blocked' || 'safety' || 'blocklist' || 'prohibited_content' =>
       'सुरक्षा फ़िल्टर',
     'other' || 'unspecified' || 'recitation' => 'फ़िल्टर',
-    _ => 'API ने',
+    _ => 'API',
   };
   return '$kya ने यह जवाब रोक दिया। शब्द बदलकर दोबारा पूछिए।';
 }
@@ -427,6 +441,9 @@ Map<String, String> jsonHeaders({String? apiKey, String? bearerToken}) {
 }
 
 /// POST + timeout एक ही जगह से (200 आने पर भी timeout लागू रहे इसलिए यहीं)।
+///
+/// Note: JSON encoding यहाँ (try के बाहर) होती है — encoding की bug को
+/// "नेटवर्क की दिक्कत" बताना user से झूठ होता है।
 Future<http.Response> postJson(
   http.Client client,
   Uri url, {
@@ -434,9 +451,8 @@ Future<http.Response> postJson(
   required Map<String, String> headers,
   required Duration timeout,
 }) {
-  return client
-      .post(url, headers: headers, body: jsonEncode(body))
-      .timeout(timeout, onTimeout: () {
+  final String encoded = jsonEncode(body);
+  return client.post(url, headers: headers, body: encoded).timeout(timeout, onTimeout: () {
     throw TimeoutException('AI request timeout', timeout);
   });
 }

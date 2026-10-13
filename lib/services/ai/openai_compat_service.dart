@@ -175,13 +175,12 @@ abstract final class OpenAiParser {
     }
 
     final String finish = (first['finish_reason'] as String? ?? '').toLowerCase();
+    final bool filtered = finish == 'content_filter';
     final Object? message = first['message'];
     if (message is! Map<String, Object?>) {
       return AiReply(
-        text: finish == 'content_filter'
-            ? blockedFromFeedback('safety')
-            : 'मॉडल ने message field के बिना जवाब भेजा।',
-        blocked: finish == 'content_filter',
+        text: filtered ? blockedFromFeedback('safety') : 'मॉडल ने message field के बिना जवाब भेजा।',
+        blocked: true,
       );
     }
 
@@ -211,9 +210,11 @@ abstract final class OpenAiParser {
     }
 
     return AiReply(
-      text: text.isEmpty ? null : text,
+      // filter लगा और text खाली = user को कारण बताओ (खाली जवाब नहीं)
+      text: text.isEmpty ? (filtered ? blockedFromFeedback('safety') : null) : text,
       toolCalls: calls,
       truncated: finish == 'length',
+      blocked: filtered,
     );
   }
 
@@ -305,7 +306,8 @@ class _OpenAiConversation implements AiConversation {
         timeout: service.requestTimeout,
       );
     } on Object catch (error) {
-      throw mapTransportFailure(error);
+      // Transport failure = user-friendly Hindi; बाक़ी bug यैसे ही ऊपर जाता है।
+      throw transportFailureFor(error) ?? error;
     }
   }
 
