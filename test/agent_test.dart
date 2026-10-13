@@ -23,8 +23,15 @@ class _SpyTool extends JarvisTool {
           description: 'test spy tool',
           requiresConfirmation: needsConfirm,
           confirmationPrompt: confirmPrompt,
+          // timeCall के args से मेल खाता param — वरना registry validation ही
+          // fail कर देगी (जो भी एक असली behavior है, पर test का मकसद नहीं)।
           params: const <String, ToolParam>{
-            'text': ToolParam(type: 'string', description: 'kuch', required: false),
+            'info': ToolParam(
+              type: 'string',
+              description: 'time/date/both',
+              required: false,
+              enumValues: <String>['time', 'date', 'both'],
+            ),
           },
         );
 
@@ -112,7 +119,8 @@ class _FakeService implements AiService {
     if (calls <= replies.length) {
       return replies[calls - 1];
     }
-    return repeat ?? const AiReply(text: 'बाकी कुछ नहीं (script खत्म)');
+    // script खत्म = चुप जवाब (AgentTurn tool के असली result पर fallback करता है)
+    return repeat ?? const AiReply();
   }
 }
 
@@ -396,7 +404,13 @@ void main() {
 
 class _CountingTool extends JarvisTool {
   _CountingTool({required this.onRun})
-      : super(name: 'get_current_time', description: 'counting spy');
+      : super(
+          name: 'get_current_time',
+          description: 'counting spy',
+          params: const <String, ToolParam>{
+            'info': ToolParam(type: 'string', description: 'x', required: false),
+          },
+        );
 
   final void Function() onRun;
 
