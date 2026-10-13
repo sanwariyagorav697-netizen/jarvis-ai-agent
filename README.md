@@ -86,6 +86,19 @@ AI layer `lib/services/ai/` में है (ऊपर की tree देखे
 
 ## 3. APK बनाना और install करना (सिर्फ़ फ़ोन से)
 
+### सबसे आसान तरीक़ा: Release का direct link (GitHub login भी ज़रूरी नहीं)
+
+**Releases** page → latest release (जैसे `v1.0.0-phase4`) → **`jarvis-release.apk`** पर tap →
+download → open → "unknown sources" allow → **Install**। साथ में `jarvis-release.apk.sha256.txt`
+है (मिलाने के लिए)। Release asset permanent रहता है और बिना-login download होता है; जबकि Actions
+का artifact 30 दिन में expire हो जाता है और उसे download करने के लिए sign-in चाहिए।
+
+Release कैसे बनता है: आप `v1.0.1` जैसा **tag** बनाइए (repo → Tags → *Create new tag*, desktop site
+पर) → CI अपने-आप build + tests चलाता है, सब हरा होने पर `release` job APK ko us tag ke Release par
+daal deta hai। नीचे के artifact steps tab भी काम करेंगे (एक ही APK है)।
+
+### Actions artifact से (agar release na bana ho)
+
 1. Chrome (⋮ → **Desktop site**) → `https://github.com/<aapka-username>/jarvis-ai-agent/actions`
 2. **Run workflow** → **Run workflow** button → done. (Push पर अपने-आप भी चलता है।)
 3. ~4–6 मिनट रुकें। हरा ✓ दिखे।
@@ -216,8 +229,12 @@ Build fail हो? Actions खुद एक **issue** खोलता है ज
   me pehle se likhe hain** — Flutter ye file apne aap add kar leta hai. In rules ke
   bina release APK me key save karte waqt crash ho sakta hai, jabki debug build me
   sab theek dikhta hai (isliye ye galti chup jati hai)।
-- APK ~20 MB hai kyunki ek "fat" APK me teeno ABI (armeabi-v7a, arm64, x86_64)
-  hain. `flutter build apk --release --split-per-abi` se ~7 MB per-ABI files
+- Release APK ≈49.6 MB (51,965,100 bytes) है, क्योंकि एक "fat" APK me teeno ABI
+  (armeabi-v7a, arm64-v8a, x86_64) hoti hain. Actions ka artifact 24 MB dikhta hai
+  kyonki GitHub ZIP compress karta hai — file size ka asli figure Release asset par
+  hai. Mobile data par bhaari ho to Phase 8 me `flutter build apk --release
+  --split-per-abi` option layenge (~7 MB per-ABI; aapke phone me aam taur par
+  `arm64-v8a` chahiye)।
   milti hain (Phase 8 me option banayenge)।
 
 ## 7. Local dev / test (PC nahi chahiye)
