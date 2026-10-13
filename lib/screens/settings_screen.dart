@@ -301,9 +301,8 @@ class _AiSectionState extends State<_AiSection> {
     }
     setState(() {
       _resultOk = error == null;
-      _result = error == null
-          ? 'key secure storage में सेव हो गई (आपके फ़ोन पर, GitHub/APK में नहीं)।'
-          : error;
+      _result = error ??
+          'key secure storage में सेव हो गई (आपके फ़ोन पर, GitHub/APK में नहीं)।';
       if (error == null) {
         _key.clear();
       }
@@ -442,10 +441,11 @@ class _AiSectionState extends State<_AiSection> {
               ),
             ],
           ),
-          note: controller.aiSummary +
-              '. \nफ्री tier की सीमा: ~15 अनुरोध/मिनट और कई सौ/दिन (Google इसे बदल सकता है) — '
-
-                  'इसलिए समय/तारीख़ और कामों के हुक्म नेट पर जाने से बचाने के लिए फोन पर ही चलते हैं।',
+          note: '${controller.aiSummary}.\n'
+              'फ्री tier की सीमा: ~15 अनुरोध/मिनट और कई सौ/दिन (Google इसे बदल '
+              'सकता है)। इसलिए समय/तारीख़ और कामों के हुक्म नेट पर न भेजकर '
+              'फ़ोन पर ही चलाए जाते हैं, ताकि quota बचे और आपका डेटा कम से '
+              'कम बाहर जाए।',
           actions: <Widget>[
             OutlinedButton.icon(
               onPressed: controller.testingAi ? null : _test,

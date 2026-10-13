@@ -164,7 +164,8 @@ class JarvisAgent {
         text = '$text (जवाब लंबा होने से कट गया — छोटा पूछिए)';
       }
       if (roundLimitHit) {
-        text = '$text (एक बार में 3 tool rounds के बाद रुक गया — बाकी दोबारा पूछिए)';
+        text = '$text (एक बार में ${AiConversation.maxToolRounds} tool rounds के बाद '
+            'रुक गया — बाकी दोबारा पूछिए)';
       }
       return AgentTurn(
         reply: text,
@@ -180,7 +181,9 @@ class JarvisAgent {
           ? ''
           : ' जो टूल चल चुके थे: ${toolResults.map((ToolResult r) => r.toolName).join(', ')}।';
       return AgentTurn(
-        reply: partial.isEmpty ? failure.message : '$partial\n${failure.message}',
+        reply: partial.isEmpty
+            ? '${failure.message}$toolNote'
+            : '$partial\n${failure.message}$toolNote',
         toolResults: toolResults,
         errorKind: failure.kind,
         errorMessage: failure.message,

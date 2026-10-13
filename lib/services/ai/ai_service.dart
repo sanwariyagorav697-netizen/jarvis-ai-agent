@@ -410,6 +410,11 @@ String maskSecret(String secret) {
   return '${'•' * (secret.length - visible)}${secret.substring(secret.length - visible)}';
 }
 
+/// Base URL से trailing slash हटाता है: वरना '$baseUrl/v1beta/...' जुड़कर
+/// '//v1beta' बन जाता है, जो 404 देता है (user 'https://x/' paste कर सकता है)।
+String normalizeBaseUrl(String value) =>
+    value.trim().replaceAll(RegExp(r'/+$'), '');
+
 /// Gemini/OpenAI-compatible dono के headers एक ही जगह से — key कभी URL में
 /// query parameter के रूप में नहीं जाती (logs/referrer me leak हो सकती है)।
 Map<String, String> jsonHeaders({String? apiKey, String? bearerToken}) {
@@ -431,7 +436,7 @@ Future<http.Response> postJson(
 }) {
   return client
       .post(url, headers: headers, body: jsonEncode(body))
-      .timeout<http.Response>(timeout, onTimeout: () {
+      .timeout(timeout, onTimeout: () {
     throw TimeoutException('AI request timeout', timeout);
   });
 }

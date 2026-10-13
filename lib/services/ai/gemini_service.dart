@@ -17,11 +17,12 @@ class GeminiService implements AiService {
   GeminiService({
     required this.model,
     String? apiKey,
-    this.baseUrl = defaultBaseUrl,
+    String baseUrl = defaultBaseUrl,
     this.requestTimeout = const Duration(seconds: 25),
     this.maxOutputTokens = 700,
     http.Client? client,
   })  : _apiKey = apiKey?.trim() ?? '',
+        baseUrl = normalizeBaseUrl(baseUrl),
         _client = client ?? http.Client();
 
   static const String defaultBaseUrl =
