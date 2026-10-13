@@ -58,9 +58,8 @@ void main() {
     test('429 प्रति-मिनट = rateLimited + retryAfter का संदेश', () {
       final AiException e = mapHttpFailure(
         429,
-        '{"error":{"message":"Resource has been exhausted (e.g. check quota).",'
-            '"status":"RESOURCE_EXHAUSTED","details":[{"reason":"RATE_LIMIT_EXCREASED",'
-            '"metadata":{"sharding_key":"rpm","retry_delay":"60s"}}]}}',
+        '{"error":{"message":"Resource has been exhausted (rate limit per-minute). '
+            'Please retry in 8 seconds.","status":"RESOURCE_EXHAUSTED"}}',
         retryAfter: const Duration(seconds: 8),
       );
       expect(e.kind, AiErrorKind.rateLimited);
