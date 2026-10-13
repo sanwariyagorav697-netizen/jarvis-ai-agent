@@ -240,10 +240,11 @@ Naya test add karte waqt bas `test/` में फ़ाइल रखें — 
 1. ✅ Repo audit
 2. ✅ Real Flutter project in git + CI builds APK from repo
 3. ✅ Voice in/out + local tools + settings + memory
-4. 🟡 Gemini (ya Groq) + tool-calling + secure key + real error handling
-   — code + CI (analyze 0, unit tests mock HTTP पर) पूरा; **बाकी:** आपके फ़ोन पर
-   असली key से "Test API Connection" + असली conversation (label 3: needs your
-   API credentials)
+4. ✅ Code + tests + CI पूरे: `flutter analyze` 0 issues, 125 unit tests (mock HTTP से),
+     release APK GitHub Actions पर बना — green run `38408702931`, artifact
+     `jarvis-ai-agent-apk` (24,237,123 bytes).
+   🟡 बचा सिर्फ़ label 2 का आख़िरी हिस्सा: आपके फ़ोन पर असली key से "Test API Connection"
+     + असली conversation (label 3: needs your API credentials) — ऊपर §5 के 5 step करें।
 5. ✅ Time/date tool + validated tool registry (Phase 2–3 के साथ ही)
 6. ⏳ Supported Android actions (open app, dialer, share, calendar reminder)
 7. ⏳ Smart-home layer (Home Assistant / IR bridge / compatible devices only)
