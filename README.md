@@ -2,7 +2,8 @@
 
 एक असली (non-demo) voice-enabled personal assistant for Android: Flutter app,
 on-device speech recognition + text-to-speech, validated tool registry, और
-Phase 4 में online AI (Google Gemini)।
+online AI (Google Gemini या कोई भी OpenAI-compatible endpoint) — API key सिर्फ़
+आपके फ़ोन की secure storage में।
 
 **यह project एक फ़ोन से ही बनता है।** कोई PC/laptop ज़रूरी नहीं: code GitHub पर
 रहता है, APK GitHub Actions बनाता है, और आप वही artifact install करते हैं।
@@ -22,7 +23,9 @@ Phase 4 में online AI (Google Gemini)।
 | Tool registry: validation, permission/confirmation, real success/failure | ✅ Implemented + unit tested | `test/tool_registry_test.dart` |
 | Conversation memory (device पर, on/off + erase) | ✅ Implemented + unit tested | `test/memory_service_test.dart` |
 | JARVIS HUD UI (animated orb, state chips) | ✅ Implemented | manual |
-| Online AI (Gemini) + API key in secure storage | ⏳ Phase 4 | — |
+| Online AI: Gemini + OpenAI-compatible, tool-calling (model टूल माँगता है, registry चलाती है) | 🟡 Implemented + unit tested — फ़ोन पर असली key से test बाकी | `test/gemini_service_test.dart`, `test/openai_compat_service_test.dart`, `test/agent_test.dart` |
+| API key: Android Keystore-backed secure storage + "Test API Connection" | 🟡 Implemented + unit tested — फ़ोन पर test बाकी | `test/api_key_store_test.dart`; फ़ोन: Settings → Test API Connection |
+| API errors के Hindi संदेश (429 RPM / daily quota / galat key / 404 model / timeout / offline) | ✅ Implemented + unit tested | `test/ai_service_test.dart` |
 | ऐप्स खोलना, dialer, share, settings screens | ⏳ Phase 6 | — |
 | Android calendar/reminders में real reminder | ⏳ Phase 6 | — |
 | AC/TV/smart-home control | ⏳ Phase 7 — **external hardware/API ज़रूरी** | — |
@@ -57,16 +60,26 @@ jarvis-ai-agent/
 │   │   ├── tts_service.dart          # TextToSpeech wrapper (stop/repeat/await)
 │   │   ├── tool_registry.dart        # validation + confirmation + execution
 │   │   ├── local_router.dart         # offline intent matching (AI नहीं, fallback)
-│   │   ├── settings_service.dart     # preferences
-│   │   └── memory_service.dart       # history + tasks (device-only)
+│   │   ├── settings_service.dart     # preferences (AI provider/model/baseUrl; key यहाँ नहीं)
+│   │   ├── memory_service.dart       # history + tasks (device-only)
+│   │   └── ai/                       # online AI layer (Phase 4)
+│   │       ├── ai_service.dart       # provider-independent contract + HTTP→Hindi error mapping
+│   │       ├── gemini_service.dart   # Gemini REST (generateContent + function calling)
+│   │       ├── openai_compat_service.dart  # Groq/OpenRouter/self-host backend, same contract
+│   │       ├── jarvis_agent.dart     # tool round-trip loop (max 3 rounds), honest failures
+│   │       ├── api_key_store.dart    # secure storage + key entry validation
+│   │       ├── ai_config.dart        # provider enum + defaults + service factory
+│   │       └── jarvis_persona.dart   # system prompt + device context (date/time guess न करे)
 │   ├── tools/                        # current_time_tool, task_tools
 │   └── widgets/                      # jarvis_orb, chat_bubble, status_strip
 ├── test/                             # unit tests (CI inhe fail होने पर रोकता है)
 └── pubspec.yaml
 ```
 
-Phase 4 में जुड़ेंगे: `lib/services/ai_service.dart`, `gemini_service.dart`,
-`api_key_store.dart` (secure storage) और ज़रूरत पड़ने पर `backend/`.
+AI layer `lib/services/ai/` में है (ऊपर की tree देखें)। `backend/` जान-बूझकर
+अभी नहीं है: free Python hosts 15 मिनट में so जाते हैं, और voice assistant के
+लिए वो UX बर्बादी है — इसलिए key on-device secure storage में है (v1 decision)।
+अपना backend जोड़ना हो तो Settings → Base URL से `baseUrl` बदलिए, code नहीं।
 
 ---
 
@@ -124,12 +137,56 @@ Build fail हो? Actions खुद एक **issue** खोलता है ज
   assistant के लिए वो UX बर्बाद है)। Backend चाहिए तो Phase 4b में `baseUrl`
   बदलकर जोड़ दिया जाएगा।
 
-Key banane के लिए: `https://aistudio.google.com/apikey` (Chrome → Desktop site)।
+### Phase 4 चालू करने के 6 कदम (सिर्फ़ फ़ोन से)
+
+1. **Key बनाइए:** Chrome → *Desktop site* → <https://aistudio.google.com/apikey>
+   → "Create API key" → key copy कीजिए (यह key कहीं share/mat कीजिएगा)।
+2. **APK install** कीजिए (Actions artifact से — §3 देखें)।
+3. **Settings → "ऑनलाइन AI"** → provider *Google Gemini* चुनिए।
+4. **मॉडल:** खाली छोड़ दें तो default `gemini-3.1-flash-lite` (free tier पर
+   उपलब्ध)। नीचे दिए chips से `gemini-3.5-flash`/`gemini-2.5-flash` भी चुन
+   सकते हैं — Google model के नाम बदलता रहता है, इसलिए field editable है।
+5. **API key** paste करके **Save key** दबाइए। key तुरंत secure storage में जाती
+   है, text box clear हो जाता है, और UI सिर्फ़ आख़िरी 4 characters दिखाता है।
+6. **Test API Connection** दबाइए — यह *सच में* एक छोटी API call करता है और
+   latency + नमूना जवाब दिखाता है। ✓ आया = सब ठीक; ✗ आया = संदेश बताएगा कि
+   key गलत है, model उपलब्ध नहीं है, या quota भर गया है।
+
+### Provider के option
+
+- **Gemini (default):** ऊपर बताया गया free tier। ⚠️ free tier पर Google inputs
+  को product improvement के लिए use **कर सकता है** — संवेदनशील बात न लिखें।
+- **OpenAI-compatible (Groq / OpenRouter / अपना backend):** provider
+  *OpenAI-compatible* चुनिए, Base URL chip दबाइए (Groq =
+  `https://api.groq.com/openai/v1`), और उस endpoint की model name डालिए।
+  Groq free tier ~30 RPM / ~1000 RPD और prompts पर training नहीं करता।
+- **बंद (default setting):** provider `off` = कोई network call नहीं, सिर्फ़
+  device tools। AI configure न होने पर app "नकली" जवाब कभी नहीं देता — सीधे
+  कहता है कि Settings में key डालिए।
+
+### ज़रूरी design notes (code में भी यही है)
+
+- समय/तारीख़ और कामों के हुक्म **पहले local router** से चलते हैं (instant,
+  offline, free quota बचता है)। बाकी सब AI के पास जाता है, और AI भी **वही**
+  `ToolRegistry` इस्तेमाल करता है — यानी model का हर "कमांड" validation और
+  confirmation से गुज़रता है, और max 3 tool rounds के बाद रुक जाता है।
+- `temperature`/`thinkingConfig` जान-बूझकर नहीं भेजे जाते (Gemini 3 के thinking
+  models कुछ values पर 400 देते हैं); सिर्फ़ `maxOutputTokens = 700`।
+- 429 (प्रति-मिनट) पर **एक ही** automatic retry, और तभी जब server `Retry-After`
+  में 12 सेकंड से कम bole। daily quota पर retry नहीं — झूटी उम्मीद नहीं देते।
+- 25 सेकंड का hard timeout: नेट धीमा हो तो app टंगता नहीं, "टाइमआउट" संदेश आता है।
 
 ## 6. Data, permissions, security notes
 
-- अभी app **कोई network request नहीं भेजता** — समय/तारीख़ और task list device पर
-  बनते हैं। Settings में हर जवाब का source label दिखता है (डिवाइस / ऑनलाइन मॉडल)।
+- Provider **off** होने तक app कोई network request नहीं भेजता — समय/तारीख़ और
+  task list device पर बनते हैं। Provider चालू करने पर सिर्फ़ आपका सवाल + थोड़ा
+  device context (तारीख़/भाषा) HTTPS से चुने हुए provider जाता है; API key
+  header में जाती है, URL/log में कभी नहीं। Settings में हर जवाब का source label
+  दिखता है (डिवाइस / ऑनलाइन मॉडल / टूल)।
+- Key `flutter_secure_storage` (Android Keystore-backed EncryptedSharedPreferences) में रहती है,
+  `SharedPreferences` (plain XML) में नहीं। इसलिए app uninstall = key भी गई;
+  और rooted device पर भी seed के बिना पढ़ना आसान नहीं। conversation memory में
+  password/API key/OTP कभी store नहीं की जाती (system prompt भी मना करता है)।
 - Mic सिर्फ़ तब सुनता है जब आप माइक button दबाते हैं। App बंद होने पर कुछ सुनता
   नहीं है, और हम ये दावा नहीं करते। Wake word (Phase 6+) भी "jab app foreground
   me ho" तक सीमित रहेगा, क्योंकि Android background execution/battery
@@ -172,7 +229,10 @@ Naya test add karte waqt bas `test/` में फ़ाइल रखें — 
 1. ✅ Repo audit
 2. ✅ Real Flutter project in git + CI builds APK from repo
 3. ✅ Voice in/out + local tools + settings + memory
-4. ⏳ Gemini (ya Groq) + tool-calling + secure key + real error handling
+4. 🟡 Gemini (ya Groq) + tool-calling + secure key + real error handling
+   — code + CI (analyze 0, unit tests mock HTTP पर) पूरा; **बाकी:** आपके फ़ोन पर
+   असली key से "Test API Connection" + असली conversation (label 3: needs your
+   API credentials)
 5. ✅ Time/date tool + validated tool registry (Phase 2–3 के साथ ही)
 6. ⏳ Supported Android actions (open app, dialer, share, calendar reminder)
 7. ⏳ Smart-home layer (Home Assistant / IR bridge / compatible devices only)

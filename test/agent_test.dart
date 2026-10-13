@@ -9,18 +9,20 @@ import 'package:jarvis_ai_agent/tools/current_time_tool.dart';
 /// एक tool जो रिकॉर्ड करता है कि उसे क्या-क्या भेजा गया — इसी से verify करते
 /// हैं कि AI का "कमांड" सिर्फ़ registry के रास्ते ही चलता है।
 class _SpyTool extends JarvisTool {
+  // नाम जान-बूझकर super ctor से अलग रखे हैं (toolName/needsConfirm/...) —
+  // वरना `use_super_parameters` lint हर जगह टकराता है।
   _SpyTool({
-    required String name,
+    String toolName = 'get_current_time',
     this.outcome = ToolOutcome.success,
     this.why = '',
     this.spoken = 'टूल का असली जवाब',
-    bool requiresConfirmation = false,
-    String confirmationPrompt = '',
+    bool needsConfirm = false,
+    String confirmPrompt = '',
   }) : super(
-          name: name,
+          name: toolName,
           description: 'test spy tool',
-          requiresConfirmation: requiresConfirmation,
-          confirmationPrompt: confirmationPrompt,
+          requiresConfirmation: needsConfirm,
+          confirmationPrompt: confirmPrompt,
           params: const <String, ToolParam>{
             'text': ToolParam(type: 'string', description: 'kuch', required: false),
           },
@@ -143,12 +145,12 @@ void main() {
     callId: 'c1',
   );
 
-  JarvisAgent _agent({required AiService? Function() builder, ToolRegistry? registry}) =>
+  JarvisAgent buildAgent({required AiService? Function() builder, ToolRegistry? registry}) =>
       JarvisAgent(registry: registry ?? ToolRegistry(<JarvisTool>[CurrentTimeTool()]), serviceBuilder: builder);
 
   group('JarvisAgent — AI band/अनकन्फियर्ड', () {
     test('service null हो तो नकली जवाब नहीं — Settings भेजने का संदेश', () async {
-      final JarvisAgent agent = _agent(builder: () => null);
+      final JarvisAgent agent = buildAgent(builder: () => null);
       final AgentTurn turn = await agent.run('कुछ भी',
           history: const <ChatMessage>[], extraContext: 'ctx');
       expect(turn.errorKind, AiErrorKind.notConfigured);
@@ -163,7 +165,7 @@ void main() {
     test('model का text जवाब वैसा ही आता है, service dispose भी होती है', () async {
       final _FakeService service =
           _FakeService(replies: const <AiReply>[AiReply(text: 'मैं ठीक हूँ, पूछिए।')]);
-      final JarvisAgent agent = _agent(builder: () => service);
+      final JarvisAgent agent = buildAgent(builder: () => service);
 
       final AgentTurn turn = await agent.run(
         'कैसे हो?',
@@ -187,7 +189,7 @@ void main() {
       final _FakeService service = _FakeService(
           replies: const <AiReply>[AiReply(text: 'लंबा जवाब', truncated: true)]);
       final AgentTurn turn =
-          await _agent(builder: () => service).run('बताओ',
+          await buildAgent(builder: () => service).run('बताओ',
               history: const <ChatMessage>[], extraContext: '');
       expect(turn.truncated, isTrue);
       expect(turn.reply, contains('कट गया'));
@@ -196,7 +198,7 @@ void main() {
     test('blocked जवाब पर safety का साफ़ संदेश', () async {
       final _FakeService service = _FakeService(
           replies: const <AiReply>[AiReply(blocked: true)]);
-      final AgentTurn turn = await _agent(builder: () => service).run('बताओ',
+      final AgentTurn turn = await buildAgent(builder: () => service).run('बताओ',
           history: const <ChatMessage>[], extraContext: '');
       expect(turn.blocked, isTrue);
       expect(turn.reply, contains('इनकार'));
@@ -205,8 +207,8 @@ void main() {
 
   group('JarvisAgent — tool calling', () {
     test('model का call registry से चलता है, args वही जाते हैं, अंतिम जवाब model का', () async {
-      final _SpyTool tool = _SpyTool(name: 'get_current_time', spoken: '11 अक्टूबर 2026');
-      final JarvisAgent agent = _agent(
+      final _SpyTool tool = _SpyTool(spoken: '11 अक्टूबर 2026');
+      final JarvisAgent agent = buildAgent(
         registry: ToolRegistry(<JarvisTool>[tool]),
         builder: () => _FakeService(replies: const <AiReply>[
           AiReply(toolCalls: <AiToolCall>[timeCall]),
@@ -225,8 +227,8 @@ void main() {
     });
 
     test('model tool के बाद चुप रहे तो टूल का असली जवाब सुनाया जाता है', () async {
-      final _SpyTool tool = _SpyTool(name: 'get_current_time', spoken: 'रविवार, 11 अक्टूबर 2026');
-      final JarvisAgent agent = _agent(
+      final _SpyTool tool = _SpyTool(spoken: 'रविवार, 11 अक्टूबर 2026');
+      final JarvisAgent agent = buildAgent(
         registry: ToolRegistry(<JarvisTool>[tool]),
         builder: () => _FakeService(replies: const <AiReply>[
           AiReply(toolCalls: <AiToolCall>[timeCall]),
@@ -240,11 +242,10 @@ void main() {
 
     test('tool fail हो तो जवाब में असली failure दिखती है (झूठा success नहीं)', () async {
       final _SpyTool tool = _SpyTool(
-        name: 'get_current_time',
         outcome: ToolOutcome.failure,
         why: 'घड़ी पढ़ने में दिक्कत',
       );
-      final JarvisAgent agent = _agent(
+      final JarvisAgent agent = buildAgent(
         registry: ToolRegistry(<JarvisTool>[tool]),
         builder: () => _FakeService(replies: const <AiReply>[
           AiReply(toolCalls: <AiToolCall>[timeCall]),
@@ -259,8 +260,8 @@ void main() {
     });
 
     test('model ने ऐसा tool माँगा जो है नहीं → registry reject करती है, कुछ नहीं चलता', () async {
-      final _SpyTool tool = _SpyTool(name: 'get_current_time');
-      final JarvisAgent agent = _agent(
+      final _SpyTool tool = _SpyTool();
+      final JarvisAgent agent = buildAgent(
         registry: ToolRegistry(<JarvisTool>[tool]),
         builder: () => _FakeService(replies: const <AiReply>[
           AiReply(toolCalls: <AiToolCall>[
@@ -280,14 +281,10 @@ void main() {
       expect(turn.reply, 'वो टूल मेरे पास नहीं है।');
     });
 
-    test(' sensitive tool: user ने इनकार किया तो denied रिकॉर्ड होता है, काम नहीं चलता', () async {
-      final _SpyTool tool = _SpyTool(
-        name: 'get_current_time',
-        requiresConfirmation: true,
-        confirmationPrompt: 'पक्का?',
-      );
+    test('sensitive tool: user ने इनकार किया तो denied रिकॉर्ड होता है, काम नहीं चलता', () async {
+      final _SpyTool tool = _SpyTool(needsConfirm: true, confirmPrompt: 'पक्का?');
       int asked = 0;
-      final JarvisAgent agent = _agent(
+      final JarvisAgent agent = buildAgent(
         registry: ToolRegistry(<JarvisTool>[tool]),
         builder: () => _FakeService(replies: const <AiReply>[
           AiReply(toolCalls: <AiToolCall>[timeCall]),
@@ -311,8 +308,8 @@ void main() {
         AiReply(toolCalls: <AiToolCall>[timeCall]),
         AiReply(text: 'ठीक'),
       ]);
-      final JarvisAgent agent = _agent(
-        registry: ToolRegistry(<JarvisTool>[_SpyTool(name: 'get_current_time')]),
+      final JarvisAgent agent = buildAgent(
+        registry: ToolRegistry(<JarvisTool>[_SpyTool()]),
         builder: () => service,
       );
       await agent.run('तारीख़', history: const <ChatMessage>[], extraContext: '');
@@ -327,9 +324,9 @@ void main() {
     });
 
     test('model बार-बार tool माँगे तो 3 rounds के बाद रुकता है (infinite loop नहीं)', () async {
-      final _SpyTool tool = _SpyTool(name: 'get_current_time');
+      final _SpyTool tool = _SpyTool();
       int executed = 0;
-      final JarvisAgent agent = _agent(
+      final JarvisAgent agent = buildAgent(
         registry: ToolRegistry(<JarvisTool>[_CountingTool(onRun: () => executed++)]),
         builder: () => _FakeService(repeat: const AiReply(toolCalls: <AiToolCall>[timeCall])),
       );
@@ -345,7 +342,7 @@ void main() {
 
   group('JarvisAgent — failures', () {
     test('AiException (quota) → kind + Hindi message + local fallback लायक', () async {
-      final JarvisAgent agent = _agent(
+      final JarvisAgent agent = buildAgent(
         builder: () => _FakeService(
           error: const AiException(
             kind: AiErrorKind.quotaExhausted,
@@ -363,8 +360,8 @@ void main() {
     });
 
     test('quota + चल चुका tool → जवाब में दोनों की सच्ची रिपोर्ट', () async {
-      final JarvisAgent agent = _agent(
-        registry: ToolRegistry(<JarvisTool>[_SpyTool(name: 'get_current_time', spoken: 'रविवार')]),
+      final JarvisAgent agent = buildAgent(
+        registry: ToolRegistry(<JarvisTool>[_SpyTool(spoken: 'रविवार')]),
         builder: () => _FakeService(
           replies: const <AiReply>[AiReply(toolCalls: <AiToolCall>[timeCall])],
           errorAt: 2,
@@ -386,7 +383,7 @@ void main() {
     });
 
     test('अनजान exception → badResponse + "आगे कुछ नहीं किया" (crash नहीं)', () async {
-      final JarvisAgent agent = _agent(
+      final JarvisAgent agent = buildAgent(
         builder: () => _FakeService(error: StateError('bad json')),
       );
       final AgentTurn turn = await agent.run('बताओ',

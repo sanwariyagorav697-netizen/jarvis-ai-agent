@@ -24,20 +24,18 @@ Map<String, Object?> _completion({
   String? content,
   List<Map<String, Object?>>? toolCalls,
   String? finishReason,
-}) =>
-    <String, Object?>{
-      'choices': <Object?>[
-        <String, Object?>{
-          'index': 0,
-          'message': <String, Object?>{
-            'role': 'assistant',
-            'content': content,
-            if (toolCalls != null) 'tool_calls': toolCalls,
-          },
-          if (finishReason != null) 'finish_reason': finishReason,
-        },
-      ],
-    };
+}) {
+  final Map<String, Object?> message = <String, Object?>{
+    'role': 'assistant',
+    'content': content,
+  };
+  final Map<String, Object?> choice = <String, Object?>{'index': 0, 'message': message};
+  // optional keys बाद में जोड़ते हैं — collection में `if (x != null) 'k': x`
+  // null-aware element lint को पसंद नहीं करता, और shape भी यही रहता है।
+  if (toolCalls != null) message['tool_calls'] = toolCalls;
+  if (finishReason != null) choice['finish_reason'] = finishReason;
+  return <String, Object?>{'choices': <Object?>[choice]};
+}
 
 void main() {
   group('OpenAiParser', () {

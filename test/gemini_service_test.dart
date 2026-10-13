@@ -23,22 +23,25 @@ ChatMessage _user(String text) => ChatMessage(
       createdAt: DateTime(2026, 10, 13),
     );
 
-Map<String, Object?> _replyJson({String? text, List<Map<String, Object?>>? calls, String? finishReason}) {
-  return <String, Object?>{
-    'candidates': <Object?>[
-      <String, Object?>{
-        'content': <String, Object?>{
-          'role': 'model',
-          'parts': <Object?>[
-            if (text != null) <String, Object?>{'text': text},
-            for (final Map<String, Object?> call in calls ?? const <Map<String, Object?>>[])
-              <String, Object?>{'functionCall': call},
-          ],
-        },
-        if (finishReason != null) 'finishReason': finishReason,
-      },
-    ],
+Map<String, Object?> _replyJson({
+  String? text,
+  List<Map<String, Object?>>? calls,
+  String? finishReason,
+}) {
+  final Map<String, Object?> candidate = <String, Object?>{
+    'content': <String, Object?>{
+      'role': 'model',
+      'parts': <Object?>[
+        if (text != null) <String, Object?>{'text': text},
+        for (final Map<String, Object?> call
+            in calls ?? const <Map<String, Object?>>[])
+          <String, Object?>{'functionCall': call},
+      ],
+    },
   };
+  // 'finishReason' सिर्फ़ तब जब मिला हो (null field भेजना Gemini 400 करता है)।
+  if (finishReason != null) candidate['finishReason'] = finishReason;
+  return <String, Object?>{'candidates': <Object?>[candidate]};
 }
 
 void main() {
