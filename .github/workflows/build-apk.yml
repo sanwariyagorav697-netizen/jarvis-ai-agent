@@ -4,6 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
+    tags: ['v*'] # v1.2.3 jaisa tag push karne par APK ek permanent Release asset ban jaata hai
   pull_request:
     branches: [main]
 
@@ -193,3 +194,56 @@ jobs:
           gh issue create --repo "$GITHUB_REPOSITORY" \
             --title "CI: build failed (${GITHUB_SHA:0:7})" \
             --body-file /tmp/body.md
+
+  # ==========================================================================
+  # Release publish — sirf tab chalta hai jab aap ek v* tag push karein.
+  # Kyun chahiye: Actions ka artifact 30 din me expire ho jata hai aur use
+  # download karne ke liye GitHub login lagta hai. Release asset ka link
+  # bina-login, permanent hota hai — phone se seedha tap → download → install.
+  # ==========================================================================
+  release:
+    name: Publish APK as a Release asset (v* tags only)
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # sirf is job ke liye; build job read-only hi rehta hai
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          name: jarvis-ai-agent-apk
+          path: apk-in
+
+      - name: Publish release + checksum
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eo pipefail
+          SRC=$(ls apk-in/*.apk 2>/dev/null | head -1)
+          if [ -z "$SRC" ]; then
+            echo "::error::APK artifact me koi .apk file nahi mili"
+            ls -la apk-in || true
+            exit 1
+          fi
+          cp "$SRC" jarvis-release.apk
+          SHA=$(sha256sum jarvis-release.apk | cut -d' ' -f1)
+          SIZE=$(stat -c %s jarvis-release.apk)
+          printf '%s  jarvis-release.apk\n' "$SHA" > jarvis-release.apk.sha256.txt
+          {
+            echo "### Release APK (${GITHUB_REF_NAME})"
+            echo "- File: \`jarvis-release.apk\` ($SIZE bytes)"
+            echo "- SHA-256: \`$SHA\`"
+            echo "- Commit: \`${GITHUB_SHA:0:7}\`, Flutter ${{ env.FLUTTER_VERSION }}"
+            echo "- Link: https://github.com/$GITHUB_REPOSITORY/releases/download/${GITHUB_REF_NAME}/jarvis-release.apk"
+          } >> "$GITHUB_STEP_SUMMARY"
+          NOTES="Tag ${GITHUB_REF_NAME} ka release APK — GitHub Actions ne analyze (0 issues) + unit tests pass karne ke baad banaya.
+
+Signing: JARVIS_KEYSTORE_* secrets set na hone par yeh debug key se signed hai, isliye purane debug-signed build ke UPAR install na ho to pehle uninstall kijiye. Install karne ke liye 'unknown sources' allow karna hoga.
+APK me koi API key nahi hoti — key aapke phone ki Keystore-backed secure storage me jaati hai."
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" jarvis-release.apk jarvis-release.apk.sha256.txt --clobber --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$GITHUB_REF_NAME" jarvis-release.apk jarvis-release.apk.sha256.txt \
+              --title "JARVIS APK ${GITHUB_REF_NAME}" --notes "$NOTES" --repo "$GITHUB_REPOSITORY"
+          fi
+          echo "✅ Release asset ready: https://github.com/$GITHUB_REPOSITORY/releases/download/${GITHUB_REF_NAME}/jarvis-release.apk"
