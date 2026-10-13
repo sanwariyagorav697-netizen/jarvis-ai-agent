@@ -8,7 +8,7 @@ import 'jarvis_persona.dart';
 
 /// Kisi bhi OpenAI-compatible `/chat/completions` endpoint ka client:
 /// Groq (free tier), OpenRouter, ya Phase 4+ ka hamara FastAPI backend — sab
-/// isi ek class se चलते हain, sirf baseUrl + model badलता है।
+/// isi ek class se चलते हैं, sirf baseUrl + model badलता है।
 class OpenAiCompatService implements AiService {
   OpenAiCompatService({
     required this.model,
@@ -186,7 +186,7 @@ abstract final class OpenAiParser {
 
     final Object? rawContent = message['content'];
     final String text = rawContent is String ? rawContent.trim() : '';
-    // reasoning models कभी-kभี `reasoning_content` अलग field me देते हain — use नहीं करते।
+    // reasoning models कभी-kभี `reasoning_content` अलग field me देते हैं — use नहीं करते।
     final List<AiToolCall> calls = <AiToolCall>[];
     final Object? toolCalls = message['tool_calls'];
     if (toolCalls is List<Object?>) {
@@ -284,7 +284,7 @@ class _OpenAiConversation implements AiConversation {
         'model': service.model,
         'messages': messages,
         // temperature जान-बूझकर नहीं भेजते: कुछ hosted endpoints allowed range
-        // से बाहर की value पर 400 dete हain।
+        // से बाहर की value पर 400 dete हैं।
         'max_tokens': service.maxOutputTokens,
         if (declarations.isNotEmpty)
           'tools': <Object?>[

@@ -30,7 +30,7 @@ class GeminiService implements AiService {
   /// Free tier par Pro models nahi hain (2026-04 se), इसलिए Flash-Lite default।
   static const String defaultModel = 'gemini-3.1-flash-lite';
 
-  /// Settings me ye preset chips diye jaate हain — user inme se chun sakta है
+  /// Settings me ye preset chips diye jaate हैं — user inme se chun sakta है
   /// ya khud type kar sakta है (Google naye model rename karta rehta है)।
   static const List<String> suggestedModels = <String>[
     'gemini-3.1-flash-lite',

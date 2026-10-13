@@ -38,7 +38,8 @@ class _JarvisAppState extends State<JarvisApp> {
   void initState() {
     super.initState();
     // Composition root: services yahan bante hain, screens ko sirf controller
-    // milta hai. Isse AI provider (Phase 4) badalna ek jagee kaam rahega.
+    // milta hai. AI (Phase 4) bhi isi controller ke andar hai: provider/model
+    // Settings se आता है, key Android ke secure storage se — yahan कहीं hardcode nahi.
     final MemoryService memory = MemoryService();
     _tts = TtsService();
     _voice = VoiceService();

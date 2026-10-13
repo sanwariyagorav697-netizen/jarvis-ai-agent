@@ -1,13 +1,19 @@
 import 'package:flutter/material.dart';
 
 import '../app/jarvis_theme.dart';
+import '../services/ai/ai_config.dart';
+import '../services/ai/ai_service.dart';
+import '../services/ai/gemini_service.dart';
+import '../services/ai/openai_compat_service.dart';
 import '../services/assistant_controller.dart';
 import '../services/settings_service.dart';
 
-/// Settings: bhasha, आवाज़, मेमोरी। भविष्य में यहीं AI provider + key भी।
+/// Settings: bhasha, आवाज़, मेमोरी, और ऑनलाइन AI (provider + model + key)।
 ///
-/// यहाँ कोई field secret store नहीं करती — API key (Phase 4) secure storage
-/// me jayegi, is screen ke neeche uska note है।
+/// Secret rule: API key ka text box sirf Android Keystore-backed secure
+/// storage me jaता है (_AiSection ke `saveApiKey` se) — JarvisSettings /
+/// SharedPreferences me कभी नहीं, aur na ही UI me poorी key lautती है (सिर्फ़
+/// last 4 characters दिखते हैं)।
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key, required this.controller});
 
@@ -59,6 +65,7 @@ class SettingsScreen extends StatelessWidget {
             child: ListView(
               padding: const EdgeInsets.all(14),
               children: <Widget>[
+                _AiSection(controller: controller),
                 _Section(
                   title: 'सुनने की भाषा (Speech recognition)',
                   body: Wrap(
@@ -246,6 +253,264 @@ class _Section extends StatelessWidget {
             ),
         ],
       ),
+    );
+  }
+}
+
+/// AI provider + model + API key का हिस्सा. अलग StatefulWidget इसलिए कि its
+/// text controllers is section ke saath ही मरते हैं (memory leak से बचाव)।
+class _AiSection extends StatefulWidget {
+  const _AiSection({required this.controller});
+
+  final AssistantController controller;
+
+  @override
+  State<_AiSection> createState() => _AiSectionState();
+}
+
+class _AiSectionState extends State<_AiSection> {
+  final TextEditingController _model = TextEditingController();
+  final TextEditingController _baseUrl = TextEditingController();
+  final TextEditingController _key = TextEditingController();
+  bool _showKey = false;
+  String _result = '';
+  bool _resultOk = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _model.text = widget.controller.settings.aiModel;
+    _baseUrl.text = widget.controller.settings.aiBaseUrl;
+  }
+
+  @override
+  void dispose() {
+    _model.dispose();
+    _baseUrl.dispose();
+    _key.dispose();
+    super.dispose();
+  }
+
+  Future<void> _saveSettings(JarvisSettings next) =>
+      widget.controller.updateSettings(next);
+
+  Future<void> _saveKey() async {
+    final String? error = await widget.controller.saveApiKey(_key.text);
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _resultOk = error == null;
+      _result = error == null
+          ? 'key secure storage में सेव हो गई (आपके फ़ोन पर, GitHub/APK में नहीं)।'
+          : error;
+      if (error == null) {
+        _key.clear();
+      }
+    });
+  }
+
+  Future<void> _clearKey() async {
+    final bool cleared = await widget.controller.clearApiKey();
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _resultOk = cleared;
+      _result = cleared
+          ? 'key इस फ़ोन से मिटा दी गई।'
+          : 'key मिटाई नहीं जा सकी — फ़ोन की storage में दिक्कत है।';
+    });
+  }
+
+  Future<void> _test() async {
+    setState(() => _result = 'टेस्ट हो रहा है… (एक छोटी API कॉल)');
+    final AiHealth health = await widget.controller.testAiConnection();
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _resultOk = health.ok;
+      _result = health.ok
+          ? '✓ ${health.message}\nनमूना जवाब: ${health.sample}'
+          : '✗ ${health.message}';
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final AssistantController controller = widget.controller;
+    final JarvisSettings s = controller.settings;
+    final AiProvider provider = controller.aiProvider;
+    final bool online = provider.isOnline;
+    final List<String> models = provider == AiProvider.gemini
+        ? GeminiService.suggestedModels
+        : OpenAiCompatService.suggestedModels;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        _Section(
+          title: 'ऑनलाइन AI (ज़रूरी नहीं — पहले सिर्फ़ डिवाइस टूल भी चलेंगे)',
+          body: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Wrap(
+                spacing: 8,
+                children: <Widget>[
+                  for (final AiProvider p in AiProvider.values)
+                    ChoiceChip(
+                      label: Text(p.label),
+                      selected: s.aiProvider == p.name,
+                      onSelected: (bool _) =>
+                          _saveSettings(s.copyWith(aiProvider: p.name)),
+                    ),
+                ],
+              ),
+              if (online) ...<Widget>[
+                const SizedBox(height: 10),
+                Text(
+                  'मॉडल (खाली छोड़ें तो default: '
+                  '${AiConfig.defaultModelFor(provider)})',
+                  style: const TextStyle(fontSize: 12),
+                ),
+                TextField(
+                  controller: _model,
+                  autocorrect: false,
+                  keyboardType: TextInputType.text,
+                  decoration: const InputDecoration(isDense: true),
+                  onChanged: (String v) =>
+                      _saveSettings(s.copyWith(aiModel: v.trim())),
+                ),
+                Wrap(
+                  spacing: 6,
+                  children: <Widget>[
+                    for (final String m in models)
+                      ActionChip(
+                        label: Text(m),
+                        onPressed: () {
+                          _model.text = m;
+                          _saveSettings(s.copyWith(aiModel: m));
+                        },
+                      ),
+                  ],
+                ),
+              ],
+              if (provider == AiProvider.openaiCompatible) ...<Widget>[
+                const SizedBox(height: 10),
+                Text(
+                  'Base URL (Groq/OpenRouter/आपका backend) — खाली = '
+                  '${OpenAiCompatService.defaultBaseUrl}',
+                  style: const TextStyle(fontSize: 12),
+                ),
+                TextField(
+                  controller: _baseUrl,
+                  autocorrect: false,
+                  keyboardType: TextInputType.url,
+                  decoration: const InputDecoration(isDense: true),
+                  onChanged: (String v) =>
+                      _saveSettings(s.copyWith(aiBaseUrl: v.trim())),
+                ),
+                Wrap(
+                  spacing: 6,
+                  children: <Widget>[
+                    ActionChip(
+                      label: const Text('Groq'),
+                      onPressed: () {
+                        _baseUrl.text = OpenAiCompatService.defaultBaseUrl;
+                        _saveSettings(
+                            s.copyWith(aiBaseUrl: OpenAiCompatService.defaultBaseUrl));
+                      },
+                    ),
+                    ActionChip(
+                      label: const Text('OpenRouter'),
+                      onPressed: () {
+                        _baseUrl.text = OpenAiCompatService.openRouterBaseUrl;
+                        _saveSettings(s.copyWith(
+                            aiBaseUrl: OpenAiCompatService.openRouterBaseUrl));
+                      },
+                    ),
+                  ],
+                ),
+              ],
+              const SizedBox(height: 8),
+              Text(
+                controller.aiConfigured
+                    ? 'key सेव है: ${controller.aiKeyMasked} (सिर्फ़ last 4 दिख रहे हैं)'
+                    : 'key सेव नहीं है — नीचे डालिए।',
+                style: const TextStyle(fontSize: 12),
+              ),
+            ],
+          ),
+          note: controller.aiSummary +
+              '. \nफ्री tier की सीमा: ~15 अनुरोध/मिनट और कई सौ/दिन (Google इसे बदल सकता है) — '
+
+                  'इसलिए समय/तारीख़ और कामों के हुक्म नेट पर जाने से बचाने के लिए फोन पर ही चलते हैं।',
+          actions: <Widget>[
+            OutlinedButton.icon(
+              onPressed: controller.testingAi ? null : _test,
+              icon: const Icon(Icons.wifi_tethering),
+              label: Text(controller.testingAi ? 'टेस्ट हो रहा है…' : 'Test API Connection'),
+            ),
+            if (_result.isNotEmpty)
+              Text(
+                _result,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: _resultOk ? JarvisPalette.success : JarvisPalette.error,
+                ),
+              ),
+          ],
+        ),
+        if (online)
+          _Section(
+            title: 'API key (सिर्फ़ इस फ़ोन पर)',
+            body: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                TextField(
+                  controller: _key,
+                  obscureText: !_showKey,
+                  autocorrect: false,
+                  maxLines: 1,
+                  decoration: InputDecoration(
+                    isDense: true,
+                    hintText: provider == AiProvider.gemini
+                        ? 'AIza… (aistudio.google.com/apikey से)'
+                        : 'gsk_… / sk-or-…',
+                    suffixIcon: IconButton(
+                      onPressed: () => setState(() => _showKey = !_showKey),
+                      icon: Icon(_showKey
+                          ? Icons.visibility_off_outlined
+                          : Icons.visibility_outlined),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'key यहाँ paste करते ही Android की secured storage में जाती है। यह '
+
+                  'GitHub, APK assets, logs या हिस्टरी में नहीं डाली जाती, और ऐप उसे सिर्फ़ '
+
+                  'API कॉल के header में ही भेजता है।',
+                  style: TextStyle(fontSize: 11.5, height: 1.4),
+                ),
+              ],
+            ),
+            actions: <Widget>[
+              FilledButton.icon(
+                onPressed: _saveKey,
+                icon: const Icon(Icons.lock_outline),
+                label: const Text('Save key'),
+              ),
+              OutlinedButton.icon(
+                onPressed: controller.aiConfigured ? _clearKey : null,
+                icon: const Icon(Icons.delete_outline),
+                label: const Text('मिटाएँ'),
+              ),
+            ],
+          ),
+      ],
     );
   }
 }

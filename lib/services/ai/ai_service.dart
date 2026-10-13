@@ -80,7 +80,7 @@ class AiToolCall {
   final String name;
   final Map<String, Object?> arguments;
 
-  /// Gemini 3 aur OpenAI dono id dete हain; jawab me wapas lautाना zaroori है।
+  /// Gemini 3 aur OpenAI dono id dete हैं; jawab me wapas lautाना zaroori है।
   final String callId;
 
   @override
@@ -109,7 +109,7 @@ class AiReply {
 }
 
 /// Tool का asli result, model को wapas bhejne के लिए. Ek hi object से
-/// Gemini का functionResponse और OpenAI का role:tool dono bante हain।
+/// Gemini का functionResponse और OpenAI का role:tool dono bante हैं।
 class ToolEcho {
   const ToolEcho({required this.call, required this.result});
 
@@ -140,7 +140,7 @@ class AiHealth {
 }
 
 /// Ek user-turn की multi-round tool conversation. Provider-specific JSON isi
-/// के अंदर rehta है — agent को sirf [respond] aur [submitToolResults] dikhte हain।
+/// के अंदर rehta है — agent को sirf [respond] aur [submitToolResults] dikhte हैं।
 abstract class AiConversation {
   Future<AiReply> respond();
 
@@ -171,7 +171,7 @@ abstract class AiService {
   });
 
   /// Chhota, tool-free request — sirf yeh check karne के लिए कि key + model
-  /// सच me काम कर रहे हain या नहीं।
+  /// सच me काम कर रहे हैं या नहीं।
   Future<AiHealth> healthCheck();
 
   void dispose();
@@ -197,7 +197,7 @@ AiErrorKind kindFromStatus(int status) {
 }
 
 /// HTTP error को readable Hindi message में बदलता है। Dono providers isi को
-/// use करते हain, ताaki हर provider पर behavior एक जैसा रहे।
+/// use करते हैं, ताaki हर provider पर behavior एक जैसा रहे।
 AiException mapHttpFailure(int status, String body, {Duration? retryAfter}) {
   final String detail = summarizeErrorBody(body);
   final String lower = detail.toLowerCase();

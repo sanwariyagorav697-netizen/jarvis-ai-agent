@@ -3,7 +3,7 @@ import 'gemini_service.dart';
 import 'openai_compat_service.dart';
 
 /// AI provider selection. Sirf ek jagah se badalta है — app rebuild zaroori
-/// nahi (Settings screen isi ko save kartी है)।
+/// nahi (Settings screen isi ko save करती है)।
 enum AiProvider {
   /// Online AI band; sirf device tools + local router चलेंगे।
   off,

@@ -12,6 +12,9 @@ class JarvisSettings {
     this.ttsPitch = 1.0,
     this.autoSpeak = true,
     this.rememberHistory = true,
+    this.aiProvider = 'off',
+    this.aiModel = '',
+    this.aiBaseUrl = '',
   });
 
   /// 'auto' = jo bhasha user bola, wahi; 'hi' | 'en' = force.
@@ -33,6 +36,18 @@ class JarvisSettings {
   /// false = conversation history save nahi hogi (app band karte hi sab delete).
   final bool rememberHistory;
 
+  /// 'off' | 'gemini' | 'openaiCompatible' — online AI provider. API key yahan
+  /// कभी नहीं जाती (wo secure storage me rehti है); ye sirf *kaun sa* provider
+  /// है यही बताता है।
+  final String aiProvider;
+
+  /// '' = us provider का default model. Google naye model naam deta रहता है,
+  /// इसलिए ye field user बदल सकता है (Settings me editable)।
+  final String aiModel;
+
+  /// OpenAI-compatible endpoints के लिए base URL; '' = built-in default।
+  final String aiBaseUrl;
+
   JarvisSettings copyWith({
     String? replyLanguage,
     String? speechLocale,
@@ -41,6 +56,9 @@ class JarvisSettings {
     double? ttsPitch,
     bool? autoSpeak,
     bool? rememberHistory,
+    String? aiProvider,
+    String? aiModel,
+    String? aiBaseUrl,
   }) {
     return JarvisSettings(
       replyLanguage: replyLanguage ?? this.replyLanguage,
@@ -50,6 +68,9 @@ class JarvisSettings {
       ttsPitch: ttsPitch ?? this.ttsPitch,
       autoSpeak: autoSpeak ?? this.autoSpeak,
       rememberHistory: rememberHistory ?? this.rememberHistory,
+      aiProvider: aiProvider ?? this.aiProvider,
+      aiModel: aiModel ?? this.aiModel,
+      aiBaseUrl: aiBaseUrl ?? this.aiBaseUrl,
     );
   }
 
@@ -66,6 +87,9 @@ class SettingsService {
   static const String kTtsPitch = 'jarvis.tts_pitch';
   static const String kAutoSpeak = 'jarvis.auto_speak';
   static const String kRememberHistory = 'jarvis.remember_history';
+  static const String kAiProvider = 'jarvis.ai_provider';
+  static const String kAiModel = 'jarvis.ai_model';
+  static const String kAiBaseUrl = 'jarvis.ai_base_url';
 
   SharedPreferences? _prefs;
 
@@ -83,6 +107,9 @@ class SettingsService {
       ttsPitch: (p.getDouble(kTtsPitch) ?? d.ttsPitch).clamp(0.5, 2.0).toDouble(),
       autoSpeak: p.getBool(kAutoSpeak) ?? d.autoSpeak,
       rememberHistory: p.getBool(kRememberHistory) ?? d.rememberHistory,
+      aiProvider: p.getString(kAiProvider) ?? d.aiProvider,
+      aiModel: p.getString(kAiModel) ?? d.aiModel,
+      aiBaseUrl: p.getString(kAiBaseUrl) ?? d.aiBaseUrl,
     );
   }
 
@@ -95,5 +122,8 @@ class SettingsService {
     await p.setDouble(kTtsPitch, s.ttsPitch);
     await p.setBool(kAutoSpeak, s.autoSpeak);
     await p.setBool(kRememberHistory, s.rememberHistory);
+    await p.setString(kAiProvider, s.aiProvider);
+    await p.setString(kAiModel, s.aiModel.trim());
+    await p.setString(kAiBaseUrl, s.aiBaseUrl.trim());
   }
 }
