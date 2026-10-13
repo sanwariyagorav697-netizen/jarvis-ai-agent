@@ -47,6 +47,7 @@ jarvis-ai-agent/
 ├── .github/workflows/build-apk.yml   # सारा build + tests + APK artifact
 ├── android/                          # Flutter 3.47.7 के template से बना असली scaffold
 │   ├── app/build.gradle.kts          # package id + signing (key.properties)
+│   ├── app/proguard-rules.pro        # R8 keep rules (flutter_secure_storage) — release APK के लिए ज़रूरी
 │   ├── app/src/main/AndroidManifest.xml  # permissions + <queries>
 │   └── gradle/wrapper/               # wrapper jar/gradlew CI में Flutter tool inject करता है
 ├── lib/
@@ -183,10 +184,17 @@ Build fail हो? Actions खुद एक **issue** खोलता है ज
   device context (तारीख़/भाषा) HTTPS से चुने हुए provider जाता है; API key
   header में जाती है, URL/log में कभी नहीं। Settings में हर जवाब का source label
   दिखता है (डिवाइस / ऑनलाइन मॉडल / टूल)।
-- Key `flutter_secure_storage` (Android Keystore-backed EncryptedSharedPreferences) में रहती है,
-  `SharedPreferences` (plain XML) में नहीं। इसलिए app uninstall = key भी गई;
-  और rooted device पर भी seed के बिना पढ़ना आसान नहीं। conversation memory में
-  password/API key/OTP कभी store नहीं की जाती (system prompt भी मना करता है)।
+- Key `flutter_secure_storage` 11.x की default policy में रहती है: Android Keystore
+  में protected RSA-OAEP(SHA-256) से wrapped key, value AES/GCM से encrypted — यानी
+  plain `SharedPreferences` XML में key नहीं लिखी जाती। (v11 में
+  `encryptedSharedPreferences` जैसा कोई flag बचा नहीं; default ही strong policy है —
+  plugin के `lib/options/android_options.dart` से verify किया, 2026-10-13।)
+  app uninstall = key भी गई; rooted device पर भी Keystore seed के बिना पढ़ना आसान
+  नहीं। **ध्यान दें:** plugin का `resetOnError: true` default है — device का PIN/lock
+  बदलने या factory reset के बाद Keystore key न मिले तो stored value अपने आप मिट
+  जाएगी और Settings में key दोबारा डालनी पड़ेगी (designed behavior, bug नहीं)।
+  conversation memory में password/API key/OTP कभी store नहीं की जाती (system prompt
+  भी मना करता है)।
 - Mic सिर्फ़ तब सुनता है जब आप माइक button दबाते हैं। App बंद होने पर कुछ सुनता
   नहीं है, और हम ये दावा नहीं करते। Wake word (Phase 6+) भी "jab app foreground
   me ho" तक सीमित रहेगा, क्योंकि Android background execution/battery
@@ -202,9 +210,12 @@ Build fail हो? Actions खुद एक **issue** खोलता है ज
   workflow me pin hai (`3.47.7`)।
 - R8 + resource shrinking: Flutter 3.47 ka apna Gradle plugin ise release build
   par khud on karta hai (aur `flutter_proguard_rules.pro` bhi deta hai), isliye
-  `android/app/build.gradle.kts` me humne kuch set nahi kiya. Kisi plugin ke liye
-  extra keep-rules chahiye ho to `android/app/proguard-rules.pro` bana dein —
-  Flutter use automatically utha leta hai।
+  `android/app/build.gradle.kts` me humne kuch set nahi kiya. Jo plugins reflection
+  ya runtime class-lookup par chalte hain (`flutter_secure_storage` → Android
+  Keystore / androidx.security) unke keep rules **`android/app/proguard-rules.pro`
+  me pehle se likhe hain** — Flutter ye file apne aap add kar leta hai. In rules ke
+  bina release APK me key save karte waqt crash ho sakta hai, jabki debug build me
+  sab theek dikhta hai (isliye ye galti chup jati hai)।
 - APK ~20 MB hai kyunki ek "fat" APK me teeno ABI (armeabi-v7a, arm64, x86_64)
   hain. `flutter build apk --release --split-per-abi` se ~7 MB per-ABI files
   milti hain (Phase 8 me option banayenge)।
