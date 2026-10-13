@@ -352,7 +352,11 @@ class AssistantController extends ChangeNotifier {
     }
     await _speakOrShow(
       turn.reply,
-      source: turn.aiAnswered ? AnswerSource.onlineModel : AnswerSource.tool,
+      // Source label honest रहे: model का text = online, चले टूल का result =
+      // tool, और कुछ न मिलने पर localOnly (AI ने कहा ही नहीं)।
+      source: turn.aiAnswered
+          ? AnswerSource.onlineModel
+          : (turn.toolResults.isEmpty ? AnswerSource.localOnly : AnswerSource.tool),
       failed: turn.hasError || turn.anyToolFailed,
     );
     if (turn.hasError) {
