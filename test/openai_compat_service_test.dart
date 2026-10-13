@@ -286,7 +286,7 @@ void main() {
         model: 'm',
         apiKey: 'gsk_test1234567890abcdef',
         client: MockClient((http.Request request) async => jsonResponse(
-            '{"error":{"message":"Invalid API key"}}', 401)),
+            '{"error":{"message":"Invalid API key"}}', status: 401)),
       );
       await expectLater(
         service
