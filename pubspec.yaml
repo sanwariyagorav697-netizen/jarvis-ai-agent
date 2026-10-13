@@ -20,6 +20,12 @@ dependencies:
   # Settings + conversation history (app-private storage).
   shared_preferences: ^2.3.3
 
+  # Online AI (Gemini REST + OpenAI-compatible endpoints).
+  http: ^1.5.0
+
+  # API key sirf Android Keystore-backed secure storage me (plain SharedPreferences me nahi).
+  flutter_secure_storage: ^11.2.0
+
   cupertino_icons: ^1.0.8
 
 dev_dependencies:
