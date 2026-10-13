@@ -140,8 +140,10 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -eo pipefail
+          # Title "CI: build failed (<sha>)" hai (permissive search purane
+          # "CI: APK build failed" titles ko bhi pakad leti है)।
           for n in $(gh issue list --repo "${{ github.repository }}" --state open \
-                       --search "CI: APK build failed in:title" --json number -q ".[].number"); do
+                       --search "build failed in:title" --json number -q ".[].number"); do
             gh issue close "$n" -r completed \
               --comment "Green build: run ${{ github.run_id }} (${{ github.sha }}). Aapka CI-failure issue isliye band kar diya gaya."
           done
