@@ -236,10 +236,7 @@ jobs:
             echo "- Commit: \`${GITHUB_SHA:0:7}\`, Flutter ${{ env.FLUTTER_VERSION }}"
             echo "- Link: https://github.com/$GITHUB_REPOSITORY/releases/download/${GITHUB_REF_NAME}/jarvis-release.apk"
           } >> "$GITHUB_STEP_SUMMARY"
-          NOTES="Tag ${GITHUB_REF_NAME} ka release APK — GitHub Actions ne analyze (0 issues) + unit tests pass karne ke baad banaya.
-
-Signing: JARVIS_KEYSTORE_* secrets set na hone par yeh debug key se signed hai, isliye purane debug-signed build ke UPAR install na ho to pehle uninstall kijiye. Install karne ke liye 'unknown sources' allow karna hoga.
-APK me koi API key nahi hoti — key aapke phone ki Keystore-backed secure storage me jaati hai."
+          NOTES="JARVIS ${GITHUB_REF_NAME} — release APK, GitHub Actions par analyze (0 issues) + 125 unit tests pass hone ke baad bana."$'\n\n'"Install: neeche \`jarvis-release.apk\` download kijiye → phone par open → 'unknown sources' allow → install. APK me koi API key nahi hoti; key aapke phone ki Keystore-backed secure storage me jaati hai (Settings → ऑनलाइन AI → Test API Connection)."$'\n\n'"Signing: JARVIS_KEYSTORE_* secrets set na hone par yeh debug key se signed hai — isliye purane debug-signed build ke UPAR install na ho to pehle uninstall karna padega. Stable upgrades ke liye repo me 4 signing secrets set kar dijiye."
           if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release upload "$GITHUB_REF_NAME" jarvis-release.apk jarvis-release.apk.sha256.txt --clobber --repo "$GITHUB_REPOSITORY"
           else
